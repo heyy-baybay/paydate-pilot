@@ -42,7 +42,7 @@ function getOrdinal(n: number): string {
 }
 
 function BillsManagerContent(props: Omit<MyBillsProps, 'ignoredVendorCount' | 'onRestoreIgnoredVendors'> & {
-  maxHeight?: string;
+  maxHeight?: string | null;
 }) {
   const {
     bills,
@@ -54,6 +54,8 @@ function BillsManagerContent(props: Omit<MyBillsProps, 'ignoredVendorCount' | 'o
     onDismissSuggestion,
     maxHeight = '300px',
   } = props;
+
+  const useSectionScrollAreas = maxHeight !== null;
 
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [showBills, setShowBills] = useState(true);
@@ -102,58 +104,111 @@ function BillsManagerContent(props: Omit<MyBillsProps, 'ignoredVendorCount' | 'o
           </CollapsibleTrigger>
 
           <CollapsibleContent>
-            <ScrollArea className={`mt-2`} style={{ height: maxHeight }}>
-              <div className="space-y-2 pr-4">
-                {suggestedVendors.map((suggestion) => (
-                  <div
-                    key={suggestion.vendor}
-                    className="flex flex-col items-stretch justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border md:flex-row md:items-center"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate" title={suggestion.vendor}>
-                        {suggestion.vendor}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        ~{formatCurrency(suggestion.avgAmount)} • {suggestion.occurrences}x seen • ~{getOrdinal(suggestion.suggestedDueDay)}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col gap-2 flex-shrink-0 sm:flex-row sm:items-center sm:justify-end">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        className="h-8 px-3 w-full sm:w-auto"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddFromSuggestion(suggestion);
-                          toast.success('Added to My Bills', { description: suggestion.vendor });
-                        }}
+              {useSectionScrollAreas ? (
+                <ScrollArea className="mt-2" style={{ height: maxHeight }}>
+                  <div className="space-y-2 pr-4">
+                    {suggestedVendors.map((suggestion) => (
+                      <div
+                        key={suggestion.vendor}
+                        className="flex flex-col items-stretch justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border md:flex-row md:items-center"
                       >
-                        <Plus className="w-4 h-4" />
-                        <span className="ml-1 text-xs">Add</span>
-                      </Button>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate" title={suggestion.vendor}>
+                            {suggestion.vendor}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            ~{formatCurrency(suggestion.avgAmount)} • {suggestion.occurrences}x seen • ~{getOrdinal(suggestion.suggestedDueDay)}
+                          </p>
+                        </div>
 
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-3 w-full sm:w-auto text-muted-foreground hover:text-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDismissSuggestion(suggestion.vendor);
-                          toast.message('Declined suggestion', { description: suggestion.vendor });
-                        }}
-                        title="Decline suggestion"
-                      >
-                        <X className="w-4 h-4" />
-                        <span className="ml-1 text-xs">Decline</span>
-                      </Button>
-                    </div>
+                        <div className="flex flex-col gap-2 flex-shrink-0 sm:flex-row sm:items-center sm:justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 px-3 w-full sm:w-auto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddFromSuggestion(suggestion);
+                              toast.success('Added to My Bills', { description: suggestion.vendor });
+                            }}
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span className="ml-1 text-xs">Add</span>
+                          </Button>
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-3 w-full sm:w-auto text-muted-foreground hover:text-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDismissSuggestion(suggestion.vendor);
+                              toast.message('Declined suggestion', { description: suggestion.vendor });
+                            }}
+                            title="Decline suggestion"
+                          >
+                            <X className="w-4 h-4" />
+                            <span className="ml-1 text-xs">Decline</span>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
+                </ScrollArea>
+              ) : (
+                <div className="mt-2 space-y-2 pr-4">
+                  {suggestedVendors.map((suggestion) => (
+                    <div
+                      key={suggestion.vendor}
+                      className="flex flex-col items-stretch justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border md:flex-row md:items-center"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate" title={suggestion.vendor}>
+                          {suggestion.vendor}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          ~{formatCurrency(suggestion.avgAmount)} • {suggestion.occurrences}x seen • ~{getOrdinal(suggestion.suggestedDueDay)}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-2 flex-shrink-0 sm:flex-row sm:items-center sm:justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 px-3 w-full sm:w-auto"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddFromSuggestion(suggestion);
+                            toast.success('Added to My Bills', { description: suggestion.vendor });
+                          }}
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="ml-1 text-xs">Add</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 px-3 w-full sm:w-auto text-muted-foreground hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDismissSuggestion(suggestion.vendor);
+                            toast.message('Declined suggestion', { description: suggestion.vendor });
+                          }}
+                          title="Decline suggestion"
+                        >
+                          <X className="w-4 h-4" />
+                          <span className="ml-1 text-xs">Decline</span>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
             <p className="text-xs text-muted-foreground text-center mt-2">
               {suggestedVendors.length} vendor{suggestedVendors.length !== 1 ? 's' : ''} suggested
@@ -178,8 +233,93 @@ function BillsManagerContent(props: Omit<MyBillsProps, 'ignoredVendorCount' | 'o
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <ScrollArea className={`mt-2`} style={{ height: maxHeight }}>
-            <div className="space-y-2">
+          {useSectionScrollAreas ? (
+            <ScrollArea className="mt-2" style={{ height: maxHeight }}>
+              <div className="space-y-2">
+                {activeBills.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No bills added yet. Add from suggestions above or create manually.
+                  </p>
+                ) : (
+                  activeBills.map((bill) => (
+                    <div
+                      key={bill.id}
+                      className="p-2 rounded-lg bg-muted/50 border border-border"
+                    >
+                      {editingId === bill.id ? (
+                        <div className="space-y-2">
+                          <Input
+                            value={editForm.vendor}
+                            onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })}
+                            placeholder="Vendor name"
+                            className="h-8 text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <Input
+                              type="number"
+                              value={editForm.amount}
+                              onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                              placeholder="Amount"
+                              className="h-8 text-sm flex-1"
+                            />
+                            <Input
+                              type="number"
+                              min="1"
+                              max="31"
+                              value={editForm.dueDay}
+                              onChange={(e) => setEditForm({ ...editForm, dueDay: e.target.value })}
+                              placeholder="Day"
+                              className="h-8 text-sm w-16"
+                            />
+                          </div>
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditingId(null)}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-primary" onClick={() => saveEdit(bill.id)}>
+                              <Check className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate" title={bill.vendor}>
+                              {bill.vendor}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCurrency(bill.amount)} • {getOrdinal(bill.dueDay)} of month
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => startEdit(bill)}
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-expense"
+                              onClick={() => onRemoveBill(bill.id)}
+                              title="Remove (also prevents it from being suggested again)"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="mt-2 space-y-2">
               {activeBills.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No bills added yet. Add from suggestions above or create manually.
@@ -261,7 +401,7 @@ function BillsManagerContent(props: Omit<MyBillsProps, 'ignoredVendorCount' | 'o
                 ))
               )}
             </div>
-          </ScrollArea>
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>
@@ -316,7 +456,7 @@ export function MyBills({
                 <SlidersHorizontal className="w-4 h-4" />
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-full sm:max-w-3xl">
+            <SheetContent className="w-full sm:max-w-3xl overflow-y-auto">
               <SheetHeader className="mb-4">
                 <SheetTitle>Bills Manager</SheetTitle>
                 <p className="text-sm text-muted-foreground">
@@ -332,7 +472,7 @@ export function MyBills({
                 onRemoveBill={onRemoveBill}
                 onAddFromSuggestion={onAddFromSuggestion}
                 onDismissSuggestion={onDismissSuggestion}
-                maxHeight="70vh"
+                maxHeight={null}
               />
             </SheetContent>
           </Sheet>
