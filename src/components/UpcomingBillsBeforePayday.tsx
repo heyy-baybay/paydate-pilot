@@ -2,7 +2,7 @@ import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp } from 'lucide-r
 import { Transaction, PayPeriod } from '@/types/finance';
 import { formatCurrency, getPayPeriods } from '@/utils/financeUtils';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PendingCommission } from './ExpectedCommission';
+import { PendingCommission } from '@/types/finance';
 
 interface UpcomingBillsBeforePaydayProps {
   transactions: Transaction[];
