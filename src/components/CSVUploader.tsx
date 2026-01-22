@@ -3,16 +3,17 @@ import { Upload, FileSpreadsheet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface CSVUploaderProps {
-  onUpload: (content: string) => void;
+  onUpload: (content: string, merge?: boolean) => void;
   hasData: boolean;
 }
 
 export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [pendingMerge, setPendingMerge] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback((file: File) => {
+  const handleFile = useCallback((file: File, merge = false) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
       alert('Please upload a CSV file');
       return;
@@ -22,7 +23,8 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
     reader.onload = (e) => {
       const content = e.target?.result as string;
       setFileName(file.name);
-      onUpload(content);
+      onUpload(content, merge);
+      setPendingMerge(false);
     };
     reader.readAsText(file);
   }, [onUpload]);
@@ -48,18 +50,19 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
     setIsDragging(false);
   }, []);
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback((merge = false) => {
+    setPendingMerge(merge);
     fileInputRef.current?.click();
   }, []);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    if (file) handleFile(file, pendingMerge);
     // Reset input so same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [handleFile]);
+  }, [handleFile, pendingMerge]);
 
   const handleClear = useCallback(() => {
     setFileName(null);
@@ -67,15 +70,23 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
 
   if (hasData && fileName) {
     return (
-      <div className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border">
-        <FileSpreadsheet className="w-5 h-5 text-primary" />
-        <span className="flex-1 text-sm font-medium truncate">{fileName}</span>
-        <Button variant="ghost" size="sm" onClick={handleClick}>
-          Replace
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleClear}>
-          <X className="w-4 h-4" />
-        </Button>
+      <div className="flex flex-col gap-2 p-4 rounded-lg bg-card border border-border">
+        <div className="flex items-center gap-3">
+          <FileSpreadsheet className="w-5 h-5 text-primary" />
+          <span className="flex-1 text-sm font-medium truncate">{fileName}</span>
+          <Button variant="ghost" size="icon" onClick={handleClear}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleClick(false)}>
+            Replace
+          </Button>
+          <Button variant="default" size="sm" className="flex-1" onClick={() => handleClick(true)}>
+            <Upload className="w-4 h-4 mr-1" />
+            Merge
+          </Button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -93,7 +104,7 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onClick={handleClick}
+      onClick={() => handleClick(false)}
     >
       <input
         ref={fileInputRef}
