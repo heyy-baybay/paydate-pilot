@@ -7,6 +7,7 @@ import { MonthFilter } from '@/components/MonthFilter';
 import { BalanceSettings } from '@/components/BalanceSettings';
 import { RecurringSummary } from '@/components/RecurringSummary';
 import { PayPeriodInfo } from '@/components/PayPeriodInfo';
+import { UpcomingBillsBeforePayday } from '@/components/UpcomingBillsBeforePayday';
 import { Transaction, FinanceSettings } from '@/types/finance';
 import { 
   parseCSV, 
@@ -139,6 +140,11 @@ const Index = () => {
               {/* Sidebar */}
               <div className="space-y-6">
                 <CSVUploader onUpload={handleCSVUpload} hasData={true} />
+                <UpcomingBillsBeforePayday 
+                  transactions={filteredTransactions}
+                  currentBalance={currentBalance}
+                  selectedMonth={settings.selectedMonth}
+                />
                 <PayPeriodInfo selectedMonth={settings.selectedMonth} />
                 <RecurringSummary transactions={filteredTransactions} />
               </div>
