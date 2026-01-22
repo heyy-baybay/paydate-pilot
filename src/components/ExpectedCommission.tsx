@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCurrency } from '@/utils/financeUtils';
+import { PendingCommission } from '@/types/finance';
 import {
   Dialog,
   DialogContent,
@@ -12,12 +13,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
-export interface PendingCommission {
-  id: string;
-  amount: number;
-  expectedDate: Date;
-  cutoffDate: string;
-}
+export type { PendingCommission };
 
 interface ExpectedCommissionProps {
   commissions: PendingCommission[];
