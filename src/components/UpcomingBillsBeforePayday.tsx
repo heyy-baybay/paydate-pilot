@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp, ChevronDown, ChevronUp, Edit2, RefreshCw, X } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp, ChevronDown, ChevronUp, Edit2, RefreshCw, X, Expand, PieChart } from 'lucide-react';
 import { Transaction, PayPeriod, TransactionCategory, PendingCommission } from '@/types/finance';
 import { formatCurrency, getPayPeriods } from '@/utils/financeUtils';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,6 +19,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import { Progress } from '@/components/ui/progress';
 
 interface UpcomingBillsBeforePaydayProps {
   transactions: Transaction[];
@@ -168,15 +176,156 @@ export function UpcomingBillsBeforePayday({
     return colors[category] || colors['Miscellaneous'];
   };
 
+  // Group bills by category for detailed view
+  const billsByCategory = useMemo(() => {
+    const grouped = new Map<TransactionCategory, { bills: RecurringBill[], total: number }>();
+    billsBeforePayday.forEach(bill => {
+      const existing = grouped.get(bill.category) || { bills: [], total: 0 };
+      existing.bills.push(bill);
+      existing.total += bill.amount;
+      grouped.set(bill.category, existing);
+    });
+    return Array.from(grouped.entries()).sort((a, b) => b[1].total - a[1].total);
+  }, [billsBeforePayday]);
+
   if (billsBeforePayday.length === 0 && transactions.length === 0) {
     return null;
   }
 
   return (
     <div className="stat-card border-2 border-primary/20">
-      <div className="flex items-center gap-2 mb-4">
-        <Clock className="w-5 h-5 text-primary" />
-        <h3 className="font-semibold">Bills Before Next Payday</h3>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Clock className="w-5 h-5 text-primary" />
+          <h3 className="font-semibold">Bills Before Next Payday</h3>
+        </div>
+        {billsBeforePayday.length > 0 && (
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground hover:text-foreground">
+                <Expand className="w-4 h-4 mr-1" />
+                <span className="text-xs">Details</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-full sm:max-w-lg">
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  Bills Before Next Payday
+                </SheetTitle>
+              </SheetHeader>
+              
+              <ScrollArea className="h-[calc(100vh-120px)] mt-6 pr-4">
+                {/* Summary Section */}
+                <div className="space-y-4 mb-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-lg bg-expense/10 border border-expense/20">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Bills</p>
+                      <p className="text-2xl font-bold font-mono text-expense">{formatCurrency(totalNeeded)}</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Balance</p>
+                      <p className="text-2xl font-bold font-mono">{formatCurrency(currentBalance)}</p>
+                    </div>
+                  </div>
+
+                  {/* Balance Bar */}
+                  <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Coverage</span>
+                      <span className={isShort ? 'text-expense font-semibold' : 'text-income font-semibold'}>
+                        {Math.min(100, Math.round((currentBalance / totalNeeded) * 100))}%
+                      </span>
+                    </div>
+                    <Progress 
+                      value={Math.min(100, (currentBalance / totalNeeded) * 100)} 
+                      className={`h-3 ${isShort ? '[&>div]:bg-expense' : '[&>div]:bg-income'}`}
+                    />
+                    {isShort && (
+                      <p className="text-xs text-expense mt-2">
+                        Shortfall: {formatCurrency(shortfall)}
+                      </p>
+                    )}
+                  </div>
+
+                  {nextCommission && (
+                    <div className="p-4 rounded-lg bg-income/10 border border-income/20">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">After Commission</p>
+                      <p className="text-2xl font-bold font-mono text-income">
+                        {formatCurrency(currentBalance - totalNeeded + nextCommission.amount)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Commission: {formatCurrency(nextCommission.amount)} on {formatPayDate(nextCommission.expectedDate)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Category Breakdown */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <PieChart className="w-4 h-4 text-muted-foreground" />
+                    <h4 className="font-semibold text-sm">By Category</h4>
+                  </div>
+                  <div className="space-y-3">
+                    {billsByCategory.map(([category, { total }]) => (
+                      <div key={category} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className={`${getCategoryColor(category)} text-xs`}>
+                            {category}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary/60 rounded-full" 
+                              style={{ width: `${(total / totalNeeded) * 100}%` }}
+                            />
+                          </div>
+                          <span className="font-mono text-sm font-medium w-20 text-right">
+                            {formatCurrency(total)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* All Bills List */}
+                <div>
+                  <h4 className="font-semibold text-sm mb-4">All {billsBeforePayday.length} Bills</h4>
+                  <div className="space-y-2">
+                    {billsBeforePayday.map((bill) => (
+                      <div 
+                        key={bill.id} 
+                        className="p-3 rounded-lg bg-muted/50 border border-border"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="text-sm font-medium truncate" title={bill.vendor}>
+                              {bill.vendor}
+                            </span>
+                          </div>
+                          <span className="font-mono text-sm font-semibold text-expense">
+                            {formatCurrency(bill.amount)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>~{getOrdinal(bill.expectedDate)} of month</span>
+                          <span>•</span>
+                          <Badge variant="secondary" className={`${getCategoryColor(bill.category)} text-xs px-1.5 py-0`}>
+                            {bill.category}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </ScrollArea>
+            </SheetContent>
+          </Sheet>
+        )}
       </div>
 
       {/* Next Payday Info */}
