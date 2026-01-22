@@ -151,6 +151,7 @@ const Index = () => {
     updateBill,
     removeBill,
     addFromSuggestion,
+    dismissSuggestion,
   } = useBills(transactionsWithOverrides);
 
   const handleCSVUpload = (content: string) => {
@@ -263,6 +264,7 @@ const Index = () => {
                   onUpdateBill={updateBill}
                   onRemoveBill={removeBill}
                   onAddFromSuggestion={addFromSuggestion}
+                  onDismissSuggestion={dismissSuggestion}
                 />
                 <BillsBeforePayday
                   bills={bills}

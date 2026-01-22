@@ -4,6 +4,7 @@ import { Transaction } from '@/types/finance';
 import { extractVendorName } from '@/utils/financeUtils';
 
 const STORAGE_KEY = 'cashflow_my_bills';
+const DISMISSED_KEY = 'cashflow_dismissed_bill_suggestions';
 
 export function useBills(transactions: Transaction[]) {
   const [bills, setBills] = useState<Bill[]>(() => {
@@ -18,14 +19,40 @@ export function useBills(transactions: Transaction[]) {
     return [];
   });
 
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Record<string, boolean>>(() => {
+    const stored = localStorage.getItem(DISMISSED_KEY);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
+
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bills));
   }, [bills]);
 
+  useEffect(() => {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissedSuggestions));
+  }, [dismissedSuggestions]);
+
+  const dismissSuggestion = (vendor: string) => {
+    const key = vendor.trim().toLowerCase();
+    setDismissedSuggestions((prev) => ({ ...prev, [key]: true }));
+  };
+
+  const restoreAllSuggestions = () => {
+    setDismissedSuggestions({});
+  };
+
   // Find vendors that appear 2+ times as expenses but aren't in "My Bills" yet
   const suggestedVendors = useMemo<SuggestedVendor[]>(() => {
     const existingVendors = new Set(bills.map(b => b.vendor.toLowerCase()));
+    const dismissed = new Set(Object.keys(dismissedSuggestions).filter(k => dismissedSuggestions[k]));
     
     // Group transactions by vendor
     const vendorMap = new Map<string, { 
@@ -46,6 +73,9 @@ export function useBills(transactions: Transaction[]) {
       
       // Skip if already in My Bills
       if (existingVendors.has(vendor.toLowerCase())) return;
+
+      // Skip if user dismissed this suggestion
+      if (dismissed.has(vendor.toLowerCase())) return;
 
       const txDate = new Date(tx.date);
       const existing = vendorMap.get(vendor);
@@ -137,5 +167,7 @@ export function useBills(transactions: Transaction[]) {
     updateBill,
     removeBill,
     addFromSuggestion,
+    dismissSuggestion,
+    restoreAllSuggestions,
   };
 }
