@@ -142,10 +142,15 @@ const Index = () => {
   const currentBalance = transactions[0]?.runningBalance || settings.startingBalance;
 
   const handleCSVUpload = (content: string, merge = false) => {
+    console.log('[CSVUpload] merge:', merge, 'hasExistingData:', !!rawData);
+    
     if (merge && rawData) {
       // Merge: combine existing raw data with new content
-      setRawData(prev => prev ? `${prev}\n${content}` : content);
+      const combined = `${rawData}\n${content}`;
+      console.log('[CSVUpload] Merging data, combined length:', combined.length);
+      setRawData(combined);
     } else {
+      console.log('[CSVUpload] Replacing data');
       setRawData(content);
       // Auto-detect starting balance from oldest transaction (only on replace)
       const parsed = parseCSV(content);

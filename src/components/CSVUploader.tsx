@@ -67,15 +67,19 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
     setFileName(null);
   }, []);
 
-  if (hasData && fileName) {
+  if (hasData) {
     return (
       <div className="flex flex-col gap-2 p-4 rounded-lg bg-card border border-border">
         <div className="flex items-center gap-3">
           <FileSpreadsheet className="w-5 h-5 text-primary" />
-          <span className="flex-1 text-sm font-medium truncate">{fileName}</span>
-          <Button variant="ghost" size="icon" onClick={handleClear}>
-            <X className="w-4 h-4" />
-          </Button>
+          <span className="flex-1 text-sm font-medium truncate">
+            {fileName || 'Transaction Data Loaded'}
+          </span>
+          {fileName && (
+            <Button variant="ghost" size="icon" onClick={handleClear}>
+              <X className="w-4 h-4" />
+            </Button>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="flex-1" onClick={() => handleClick(false)}>
