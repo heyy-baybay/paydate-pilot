@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Upload, FileSpreadsheet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { parseCSV } from '@/utils/financeUtils';
 
 interface CSVUploaderProps {
   onUpload: (content: string) => void;
@@ -10,19 +11,76 @@ interface CSVUploaderProps {
 export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'reading' | 'parsing' | 'success' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateCSV = (content: string): { ok: true; count: number } | { ok: false; error: string } => {
+    const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return { ok: false, error: 'CSV appears to be empty.' };
+
+    const headerWindow = lines.slice(0, 25).map((l) => l.toLowerCase());
+    const bankHeaderLine = headerWindow.find((l) => l.startsWith('details,') && l.includes('posting date'));
+    const qbHeaderLine = headerWindow.find((l) => l.includes('transaction type') && l.includes('account name'));
+
+    if (!bankHeaderLine && !qbHeaderLine) {
+      return {
+        ok: false,
+        error:
+          'Unrecognized CSV format. Expected a bank export header like “Details, Posting Date, Description, Amount, Type, Balance” or a QuickBooks Transaction List by Date export.',
+      };
+    }
+
+    if (bankHeaderLine) {
+      const headers = bankHeaderLine.split(',').map((h) => h.replace(/"/g, '').trim());
+      const required = ['details', 'posting date', 'description', 'amount', 'type', 'balance'];
+      const missing = required.filter((r) => !headers.some((h) => h.toLowerCase() === r));
+      if (missing.length) {
+        return { ok: false, error: `Missing required header(s): ${missing.join(', ')}` };
+      }
+    }
+
+    try {
+      const parsed = parseCSV(content);
+      if (!parsed.length) return { ok: false, error: 'Parsed 0 transactions. Check the CSV contents/headers.' };
+      return { ok: true, count: parsed.length };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { ok: false, error: `Could not parse CSV: ${message}` };
+    }
+  };
 
   const handleFile = useCallback((file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      alert('Please upload a CSV file');
+      setStatus('error');
+      setStatusMessage('Please upload a .csv file.');
       return;
     }
 
     const reader = new FileReader();
+    setStatus('reading');
+    setStatusMessage('Reading file…');
     reader.onload = (e) => {
       const content = e.target?.result as string;
+
+      setStatus('parsing');
+      setStatusMessage('Parsing…');
+
+      const validation = validateCSV(content);
+      if (validation.ok === false) {
+        setStatus('error');
+        setStatusMessage(validation.error);
+        return;
+      }
+
       setFileName(file.name);
+      setStatus('success');
+      setStatusMessage(`Parsed ${validation.count} transactions.`);
       onUpload(content);
+    };
+    reader.onerror = () => {
+      setStatus('error');
+      setStatusMessage('Failed to read file. Please try again.');
     };
     reader.readAsText(file);
   }, [onUpload]);
@@ -63,6 +121,8 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
 
   const handleClear = useCallback(() => {
     setFileName(null);
+    setStatus('idle');
+    setStatusMessage('');
   }, []);
 
   if (hasData) {
@@ -83,6 +143,17 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
           <Upload className="w-4 h-4 mr-1" />
           Replace Data
         </Button>
+        {status !== 'idle' && (
+          <p
+            className={
+              status === 'error'
+                ? 'text-xs text-expense'
+                : 'text-xs text-muted-foreground'
+            }
+          >
+            {statusMessage}
+          </p>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -101,6 +172,14 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
     >
       <input
         ref={fileInputRef}
@@ -122,6 +201,17 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
         <p className="text-xs text-muted-foreground">
           Supports Chase bank and QuickBooks CSV formats
         </p>
+        {status !== 'idle' && (
+          <p
+            className={
+              status === 'error'
+                ? 'text-sm text-expense'
+                : 'text-sm text-muted-foreground'
+            }
+          >
+            {statusMessage}
+          </p>
+        )}
       </div>
     </div>
   );
