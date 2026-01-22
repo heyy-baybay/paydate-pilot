@@ -577,18 +577,47 @@ export function UpcomingBillsBeforePayday({
         </div>
       )}
 
-      {/* Projected Balance After Commission */}
+      {/* Expected Commission & Left Over */}
       {nextCommission && (
-        <div className="p-3 rounded-lg bg-muted/50 border border-border mb-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-            Projected Balance After Payday
-          </p>
-          <p className="text-xl font-bold font-mono text-income">
-            {formatCurrency(currentBalance - totalNeeded + nextCommission.amount)}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Current ({formatCurrency(currentBalance)}) − Bills ({formatCurrency(totalNeeded)}) + Commission
-          </p>
+        <div className="p-4 rounded-lg bg-income/10 border border-income/20 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-income" />
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">
+              Expected Commission
+            </p>
+          </div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xl font-bold font-mono text-income">
+              {formatCurrency(nextCommission.amount)}
+            </p>
+            <span className="text-sm text-muted-foreground">
+              {formatPayDate(nextCommission.expectedDate)}
+            </span>
+          </div>
+          
+          {/* Calculation Breakdown */}
+          <div className="pt-3 border-t border-income/20 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Current Balance</span>
+              <span className="font-mono">{formatCurrency(currentBalance)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">− Bills Due</span>
+              <span className="font-mono text-expense">−{formatCurrency(totalNeeded)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">+ Commission</span>
+              <span className="font-mono text-income">+{formatCurrency(nextCommission.amount)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm pt-2 border-t border-income/20">
+              <span className="font-medium">Left Over After Bills</span>
+              <span className={`text-lg font-bold font-mono ${
+                currentBalance - totalNeeded + nextCommission.amount >= 0 ? 'text-income' : 'text-expense'
+              }`}>
+                {formatCurrency(currentBalance - totalNeeded + nextCommission.amount)}
+              </span>
+            </div>
+          </div>
         </div>
       )}
 
