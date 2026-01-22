@@ -1,29 +1,58 @@
-import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp } from 'lucide-react';
-import { Transaction, PayPeriod } from '@/types/finance';
+import { useState } from 'react';
+import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp, ChevronDown, ChevronUp, Edit2, RefreshCw, X } from 'lucide-react';
+import { Transaction, PayPeriod, TransactionCategory, PendingCommission } from '@/types/finance';
 import { formatCurrency, getPayPeriods } from '@/utils/financeUtils';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PendingCommission } from '@/types/finance';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 interface UpcomingBillsBeforePaydayProps {
   transactions: Transaction[];
   currentBalance: number;
   selectedMonth: string | null;
   nextCommission: PendingCommission | null;
+  onUpdateTransaction?: (id: string, updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>) => void;
 }
 
 interface RecurringBill {
+  id: string;
   vendor: string;
   amount: number;
-  expectedDate: number; // day of month
+  expectedDate: number;
   lastSeen: string;
+  category: TransactionCategory;
+  transactionId: string;
 }
+
+const CATEGORIES: TransactionCategory[] = [
+  'Subscriptions', 'Fuel', 'Software', 'Suppliers', 'Utilities',
+  'Transfers', 'Fees', 'Income', 'Taxes', 'Insurance', 'Miscellaneous'
+];
 
 export function UpcomingBillsBeforePayday({ 
   transactions, 
   currentBalance,
   selectedMonth,
   nextCommission,
+  onUpdateTransaction,
 }: UpcomingBillsBeforePaydayProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [editingBill, setEditingBill] = useState<string | null>(null);
+
   const today = new Date();
   const year = selectedMonth 
     ? parseInt(selectedMonth.split('-')[0]) 
@@ -34,7 +63,6 @@ export function UpcomingBillsBeforePayday({
 
   const periods = getPayPeriods(year, month);
   
-  // Find next payment date
   const currentDay = today.getDate();
   let nextPayPeriod: PayPeriod | null = null;
   let nextCutoff: Date | null = null;
@@ -47,7 +75,6 @@ export function UpcomingBillsBeforePayday({
     }
   }
   
-  // If no more pay periods this month, look at next month
   if (!nextPayPeriod) {
     const nextMonth = month === 11 ? 0 : month + 1;
     const nextYear = month === 11 ? year + 1 : year;
@@ -56,7 +83,6 @@ export function UpcomingBillsBeforePayday({
     nextCutoff = nextPeriods[0]?.cutoffDate || null;
   }
 
-  // Identify recurring expenses and their typical day of month
   const recurringExpenses = transactions.filter(tx => tx.isRecurring && tx.amount < 0);
   
   const vendorBills = new Map<string, RecurringBill>();
@@ -69,15 +95,17 @@ export function UpcomingBillsBeforePayday({
     const existing = vendorBills.get(vendor);
     if (!existing || new Date(tx.date) > new Date(existing.lastSeen)) {
       vendorBills.set(vendor, {
+        id: vendor,
         vendor,
         amount: Math.abs(tx.amount),
         expectedDate: dayOfMonth,
         lastSeen: tx.date,
+        category: tx.category,
+        transactionId: tx.id,
       });
     }
   });
 
-  // Filter bills expected before next payday
   const billsBeforePayday: RecurringBill[] = [];
   const nextPayDate = nextPayPeriod?.paymentDate;
   
@@ -85,15 +113,11 @@ export function UpcomingBillsBeforePayday({
     const nextPayDay = nextPayDate.getDate();
     
     vendorBills.forEach(bill => {
-      // Bill is expected before next payday if its typical day is between today and next pay date
-      // Handle month boundaries
       if (today.getMonth() === nextPayDate.getMonth()) {
-        // Same month
         if (bill.expectedDate > currentDay && bill.expectedDate < nextPayDay) {
           billsBeforePayday.push(bill);
         }
       } else {
-        // Different month - bill could be end of this month or start of next
         if (bill.expectedDate > currentDay || bill.expectedDate < nextPayDay) {
           billsBeforePayday.push(bill);
         }
@@ -101,9 +125,7 @@ export function UpcomingBillsBeforePayday({
     });
   }
 
-  // Sort by expected date
   billsBeforePayday.sort((a, b) => {
-    // Normalize for month boundary
     const aDay = a.expectedDate < currentDay ? a.expectedDate + 31 : a.expectedDate;
     const bDay = b.expectedDate < currentDay ? b.expectedDate + 31 : b.expectedDate;
     return aDay - bDay;
@@ -119,6 +141,31 @@ export function UpcomingBillsBeforePayday({
       month: 'short', 
       day: 'numeric' 
     });
+  };
+
+  const handleCategoryChange = (transactionId: string, category: TransactionCategory) => {
+    onUpdateTransaction?.(transactionId, { category });
+  };
+
+  const handleRecurringToggle = (transactionId: string, isRecurring: boolean) => {
+    onUpdateTransaction?.(transactionId, { isRecurring });
+  };
+
+  const getCategoryColor = (category: string) => {
+    const colors: Record<string, string> = {
+      'Subscriptions': 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+      'Fuel': 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+      'Software': 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+      'Suppliers': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+      'Utilities': 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+      'Transfers': 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
+      'Fees': 'bg-red-500/10 text-red-600 dark:text-red-400',
+      'Income': 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      'Taxes': 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+      'Insurance': 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+      'Miscellaneous': 'bg-gray-500/10 text-gray-600 dark:text-gray-400',
+    };
+    return colors[category] || colors['Miscellaneous'];
   };
 
   if (billsBeforePayday.length === 0 && transactions.length === 0) {
@@ -220,33 +267,107 @@ export function UpcomingBillsBeforePayday({
         </p>
       </div>
 
-      {/* Bills List */}
+      {/* Bills List - Collapsible */}
       {billsBeforePayday.length > 0 ? (
-        <ScrollArea className="h-[180px] pr-4">
-          <div className="space-y-2">
-            {billsBeforePayday.map((bill) => (
-              <div 
-                key={bill.vendor} 
-                className="flex items-center justify-between p-2 rounded bg-muted/50"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                  <div className="min-w-0">
-                    <span className="text-sm truncate block" title={bill.vendor}>
-                      {bill.vendor}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      ~{getOrdinal(bill.expectedDate)} of month
-                    </span>
+        <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="w-full flex items-center justify-between p-2 h-auto">
+              <span className="text-sm font-medium">
+                {billsBeforePayday.length} Bill{billsBeforePayday.length !== 1 ? 's' : ''} Due
+              </span>
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ScrollArea className="max-h-[300px] pr-2 mt-2">
+              <div className="space-y-2">
+                {billsBeforePayday.map((bill) => (
+                  <div 
+                    key={bill.id} 
+                    className="p-3 rounded-lg bg-muted/50 border border-border"
+                  >
+                    {/* Bill Header */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm font-medium truncate" title={bill.vendor}>
+                          {bill.vendor}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-expense">
+                          {formatCurrency(bill.amount)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => setEditingBill(editingBill === bill.id ? null : bill.id)}
+                        >
+                          {editingBill === bill.id ? (
+                            <X className="w-3 h-3" />
+                          ) : (
+                            <Edit2 className="w-3 h-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Bill Details */}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>~{getOrdinal(bill.expectedDate)} of month</span>
+                      <span>•</span>
+                      <Badge variant="secondary" className={`${getCategoryColor(bill.category)} text-xs px-1.5 py-0`}>
+                        {bill.category}
+                      </Badge>
+                    </div>
+
+                    {/* Edit Controls */}
+                    {editingBill === bill.id && onUpdateTransaction && (
+                      <div className="mt-3 pt-3 border-t border-border space-y-3">
+                        {/* Category Select */}
+                        <div className="space-y-1">
+                          <Label className="text-xs">Category</Label>
+                          <Select 
+                            value={bill.category} 
+                            onValueChange={(value) => handleCategoryChange(bill.transactionId, value as TransactionCategory)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CATEGORIES.map((cat) => (
+                                <SelectItem key={cat} value={cat} className="text-xs">
+                                  {cat}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Recurring Toggle */}
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs flex items-center gap-1">
+                            <RefreshCw className="w-3 h-3" />
+                            Recurring
+                          </Label>
+                          <Switch
+                            checked={true}
+                            onCheckedChange={(checked) => handleRecurringToggle(bill.transactionId, checked)}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <span className="font-mono text-sm font-medium text-expense flex-shrink-0">
-                  {formatCurrency(bill.amount)}
-                </span>
+                ))}
               </div>
-            ))}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          </CollapsibleContent>
+        </Collapsible>
       ) : (
         <p className="text-sm text-muted-foreground text-center py-4">
           {transactions.length > 0 
