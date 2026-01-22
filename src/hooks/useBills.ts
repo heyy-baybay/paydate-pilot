@@ -209,7 +209,13 @@ export function useBills(transactions: Transaction[]) {
   }, [transactions, bills, dismissedSuggestions, ignoredVendors]);
 
   const addBill = (bill: Omit<Bill, 'id'>) => {
-    setBills(prev => [...prev, { ...bill, id: `bill-${Date.now()}` }]);
+    console.log('[useBills] addBill called with:', bill);
+    setBills(prev => {
+      const newBill = { ...bill, id: `bill-${Date.now()}` };
+      const updated = [...prev, newBill];
+      console.log('[useBills] Bills state updated. Count:', updated.length, 'New bill:', newBill);
+      return updated;
+    });
   };
 
   const updateBill = (id: string, updates: Partial<Bill>) => {
@@ -228,13 +234,16 @@ export function useBills(transactions: Transaction[]) {
   };
 
   const addFromSuggestion = (suggestion: SuggestedVendor) => {
-    addBill({
+    console.log('[useBills] addFromSuggestion called with:', suggestion);
+    const newBill = {
       vendor: suggestion.vendor,
       amount: suggestion.avgAmount,
       dueDay: suggestion.suggestedDueDay,
       category: suggestion.category,
       active: true,
-    });
+    };
+    console.log('[useBills] Creating bill:', newBill);
+    addBill(newBill);
   };
 
   return {
