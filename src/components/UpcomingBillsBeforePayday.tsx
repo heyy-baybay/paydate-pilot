@@ -159,20 +159,24 @@ export function UpcomingBillsBeforePayday({
   });
 
   const billsBeforePayday: RecurringBill[] = [];
-  const nextPayDate = nextPayPeriod?.paymentDate;
+  // If the user entered an expected commission deposit, that should define the
+  // actual "next payday" cutoff for this list.
+  const paydayCutoff = (nextCommission?.expectedDate && nextCommission.expectedDate > today)
+    ? nextCommission.expectedDate
+    : nextPayPeriod?.paymentDate;
   
-  if (nextPayDate) {
-    recentVendorBills.forEach(bill => {
+  if (paydayCutoff) {
+    recentVendorBills.forEach((bill) => {
       // Calculate when this bill would next occur based on expected date
       let expectedBillDate = new Date(today.getFullYear(), today.getMonth(), bill.expectedDate);
-      
+
       // If the expected date has already passed this month, it's next month
       if (expectedBillDate <= today) {
         expectedBillDate = new Date(today.getFullYear(), today.getMonth() + 1, bill.expectedDate);
       }
-      
-      // Check if this expected bill date falls between today and next payday
-      if (expectedBillDate > today && expectedBillDate < nextPayDate) {
+
+      // Check if this expected bill date falls between today and the next payday
+      if (expectedBillDate > today && expectedBillDate < paydayCutoff) {
         billsBeforePayday.push(bill);
       }
     });
