@@ -16,8 +16,7 @@ import {
   parseCSV, 
   processTransactions, 
   getUniqueMonths,
-  generateMonthSummary,
-  extractVendorName 
+  generateMonthSummary 
 } from '@/utils/financeUtils';
 
 const STORAGE_KEYS = {
@@ -26,6 +25,25 @@ const STORAGE_KEYS = {
   COMMISSIONS: 'cashflow_commissions',
   OVERRIDES: 'cashflow_overrides',
 };
+
+
+const canUseStorage = (): boolean => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
+const lsGet = (key: string): string | null => {
+  if (!canUseStorage()) return null;
+  try { return window.localStorage.getItem(key); } catch { return null; }
+};
+
+const lsSet = (key: string, value: string) => {
+  if (!canUseStorage()) return;
+  try { window.localStorage.setItem(key, value); } catch { /* ignore */ }
+};
+
+const lsRemove = (key: string) => {
+  if (!canUseStorage()) return;
+  try { window.localStorage.removeItem(key); } catch { /* ignore */ }
+};
+
 
 // Helper to safely parse stored commissions (dates need to be converted back)
 const parseStoredCommissions = (stored: string | null): PendingCommission[] => {
@@ -44,10 +62,10 @@ const parseStoredCommissions = (stored: string | null): PendingCommission[] => {
 
 const Index = () => {
   const [rawData, setRawData] = useState<string | null>(() => {
-    return localStorage.getItem(STORAGE_KEYS.RAW_DATA);
+    return lsGet(STORAGE_KEYS.RAW_DATA);
   });
   const [settings, setSettings] = useState<FinanceSettings>(() => {
-    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    const stored = lsGet(STORAGE_KEYS.SETTINGS);
     if (stored) {
       try {
         return JSON.parse(stored);
@@ -58,10 +76,10 @@ const Index = () => {
     return { startingBalance: 0, lowBalanceThreshold: 500, selectedMonth: null };
   });
   const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>(() => {
-    return parseStoredCommissions(localStorage.getItem(STORAGE_KEYS.COMMISSIONS));
+    return parseStoredCommissions(lsGet(STORAGE_KEYS.COMMISSIONS));
   });
   const [transactionOverrides, setTransactionOverrides] = useState<Record<string, Partial<Pick<Transaction, 'category' | 'isRecurring'>>>>(() => {
-    const stored = localStorage.getItem(STORAGE_KEYS.OVERRIDES);
+    const stored = lsGet(STORAGE_KEYS.OVERRIDES);
     if (stored) {
       try {
         return JSON.parse(stored);
@@ -75,22 +93,22 @@ const Index = () => {
   // Persist data to localStorage whenever it changes
   useEffect(() => {
     if (rawData) {
-      localStorage.setItem(STORAGE_KEYS.RAW_DATA, rawData);
+      lsSet(STORAGE_KEYS.RAW_DATA, rawData);
     } else {
-      localStorage.removeItem(STORAGE_KEYS.RAW_DATA);
+      lsRemove(STORAGE_KEYS.RAW_DATA);
     }
   }, [rawData]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    lsSet(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.COMMISSIONS, JSON.stringify(pendingCommissions));
+    lsSet(STORAGE_KEYS.COMMISSIONS, JSON.stringify(pendingCommissions));
   }, [pendingCommissions]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.OVERRIDES, JSON.stringify(transactionOverrides));
+    lsSet(STORAGE_KEYS.OVERRIDES, JSON.stringify(transactionOverrides));
   }, [transactionOverrides]);
 
   // Process transactions whenever raw data or settings change
@@ -151,26 +169,11 @@ const Index = () => {
     addBill,
     updateBill,
     removeBill,
-    clearAllBills,
     addFromSuggestion,
     dismissSuggestion,
+    ignoredVendors,
+    restoreAllIgnoredVendors,
   } = useBills(transactionsWithOverrides);
-
-  // Clear all bills and recurring overrides
-  const handleClearAllBillsAndRecurring = () => {
-    clearAllBills();
-    // Also clear all recurring overrides
-    setTransactionOverrides(prev => {
-      const newOverrides: typeof prev = {};
-      Object.entries(prev).forEach(([id, override]) => {
-        // Keep category overrides, remove recurring
-        if (override.category) {
-          newOverrides[id] = { category: override.category };
-        }
-      });
-      return newOverrides;
-    });
-  };
 
   const handleCSVUpload = (content: string) => {
     console.log('[CSVUpload] Replacing data');
@@ -200,26 +203,6 @@ const Index = () => {
       ...prev,
       [id]: { ...prev[id], ...updates }
     }));
-    
-    // When marking as recurring, auto-add to My Bills
-    if (updates.isRecurring === true) {
-      const tx = transactionsWithOverrides.find(t => t.id === id);
-      if (tx) {
-        const vendor = extractVendorName(tx.description);
-        const txDate = new Date(tx.date);
-        // Check if already in bills
-        const exists = bills.some(b => b.vendor.toLowerCase() === vendor.toLowerCase());
-        if (!exists) {
-          addBill({
-            vendor: vendor,
-            amount: Math.abs(tx.amount),
-            dueDay: txDate.getDate(),
-            category: tx.category,
-            active: true,
-          });
-        }
-      }
-    }
   };
 
   // Get next expected commission (coerce dates from localStorage strings)
@@ -304,7 +287,8 @@ const Index = () => {
                   onRemoveBill={removeBill}
                   onAddFromSuggestion={addFromSuggestion}
                   onDismissSuggestion={dismissSuggestion}
-                  onClearAll={handleClearAllBillsAndRecurring}
+                  ignoredVendorCount={Object.keys(ignoredVendors || {}).filter(k => ignoredVendors[k]).length}
+                  onRestoreIgnoredVendors={restoreAllIgnoredVendors}
                 />
                 <BillsBeforePayday
                   bills={bills}

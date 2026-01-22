@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, Sparkles, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { Bill, SuggestedVendor } from '@/types/bills';
 import { formatCurrency } from '@/utils/financeUtils';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 
 interface MyBillsProps {
   bills: Bill[];
@@ -19,9 +26,13 @@ interface MyBillsProps {
   onAddBill: (bill: Omit<Bill, 'id'>) => void;
   onUpdateBill: (id: string, updates: Partial<Bill>) => void;
   onRemoveBill: (id: string) => void;
+
   onAddFromSuggestion: (suggestion: SuggestedVendor) => void;
   onDismissSuggestion: (vendor: string) => void;
-  onClearAll?: () => void;
+
+  /** optional: used to show/clear vendor ignore list */
+  ignoredVendorCount?: number;
+  onRestoreIgnoredVendors?: () => void;
 }
 
 function getOrdinal(n: number): string {
@@ -30,16 +41,20 @@ function getOrdinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export function MyBills({
-  bills,
-  suggestedVendors,
-  onAddBill,
-  onUpdateBill,
-  onRemoveBill,
-  onAddFromSuggestion,
-  onDismissSuggestion,
-  onClearAll,
-}: MyBillsProps) {
+function BillsManagerContent(props: Omit<MyBillsProps, 'ignoredVendorCount' | 'onRestoreIgnoredVendors'> & {
+  maxHeight?: string;
+}) {
+  const {
+    bills,
+    suggestedVendors,
+    onAddBill,
+    onUpdateBill,
+    onRemoveBill,
+    onAddFromSuggestion,
+    onDismissSuggestion,
+    maxHeight = '300px',
+  } = props;
+
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [showBills, setShowBills] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -66,30 +81,7 @@ export function MyBills({
   const activeBills = bills.filter(b => b.active);
 
   return (
-    <div className="stat-card border-2 border-primary/20">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">My Bills</h3>
-        <div className="flex items-center gap-2">
-          {activeBills.length > 0 && onClearAll && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 px-2 text-xs text-muted-foreground hover:text-expense"
-              onClick={() => {
-                onClearAll();
-                toast.success('Cleared all bills');
-              }}
-            >
-              <Trash2 className="w-3 h-3 mr-1" />
-              Clear All
-            </Button>
-          )}
-          <Badge variant="secondary" className="font-mono">
-            {activeBills.length} active
-          </Badge>
-        </div>
-      </div>
-
+    <div>
       {/* Suggestions Section */}
       {suggestedVendors.length > 0 && (
         <Collapsible open={showSuggestions} onOpenChange={setShowSuggestions} className="mb-4">
@@ -108,9 +100,9 @@ export function MyBills({
               )}
             </Button>
           </CollapsibleTrigger>
+
           <CollapsibleContent>
-            <ScrollArea className="h-[300px] mt-2">
-              {/* pr-4 prevents the Radix scrollbar from overlapping the action buttons */}
+            <ScrollArea className={`mt-2`} style={{ height: maxHeight }}>
               <div className="space-y-2 pr-4">
                 {suggestedVendors.map((suggestion) => (
                   <div
@@ -125,6 +117,7 @@ export function MyBills({
                         ~{formatCurrency(suggestion.avgAmount)} • {suggestion.occurrences}x seen • ~{getOrdinal(suggestion.suggestedDueDay)}
                       </p>
                     </div>
+
                     <div className="flex flex-col gap-2 flex-shrink-0 sm:flex-row sm:items-center sm:justify-end">
                       <Button
                         type="button"
@@ -140,6 +133,7 @@ export function MyBills({
                         <Plus className="w-4 h-4" />
                         <span className="ml-1 text-xs">Add</span>
                       </Button>
+
                       <Button
                         type="button"
                         size="sm"
@@ -160,6 +154,7 @@ export function MyBills({
                 ))}
               </div>
             </ScrollArea>
+
             <p className="text-xs text-muted-foreground text-center mt-2">
               {suggestedVendors.length} vendor{suggestedVendors.length !== 1 ? 's' : ''} suggested
             </p>
@@ -181,8 +176,9 @@ export function MyBills({
             )}
           </Button>
         </CollapsibleTrigger>
+
         <CollapsibleContent>
-          <ScrollArea className="max-h-[300px] mt-2">
+          <ScrollArea className={`mt-2`} style={{ height: maxHeight }}>
             <div className="space-y-2">
               {activeBills.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
@@ -245,6 +241,7 @@ export function MyBills({
                             variant="ghost"
                             className="h-7 w-7 p-0"
                             onClick={() => startEdit(bill)}
+                            title="Edit"
                           >
                             <Edit2 className="w-3 h-3" />
                           </Button>
@@ -253,6 +250,7 @@ export function MyBills({
                             variant="ghost"
                             className="h-7 w-7 p-0 text-muted-foreground hover:text-expense"
                             onClick={() => onRemoveBill(bill.id)}
+                            title="Remove (also prevents it from being suggested again)"
                           >
                             <Trash2 className="w-3 h-3" />
                           </Button>
@@ -266,6 +264,92 @@ export function MyBills({
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
+    </div>
+  );
+}
+
+export function MyBills({
+  bills,
+  suggestedVendors,
+  onAddBill,
+  onUpdateBill,
+  onRemoveBill,
+  onAddFromSuggestion,
+  onDismissSuggestion,
+  ignoredVendorCount,
+  onRestoreIgnoredVendors,
+}: MyBillsProps) {
+  const activeBills = bills.filter(b => b.active);
+
+  return (
+    <div className="stat-card border-2 border-primary/20">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">My Bills</h3>
+          {typeof ignoredVendorCount === 'number' && ignoredVendorCount > 0 && (
+            <Badge variant="outline" className="font-mono" title="Vendors ignored so they won't be suggested again">
+              {ignoredVendorCount} ignored
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="font-mono">
+            {activeBills.length} active
+          </Badge>
+
+          {onRestoreIgnoredVendors && (ignoredVendorCount || 0) > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2"
+              onClick={() => onRestoreIgnoredVendors()}
+              title="Restore ignored vendors (they may show up as suggestions again)"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </Button>
+          )}
+
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button size="sm" variant="secondary" className="h-8 px-2" title="Open full Bills Manager">
+                <SlidersHorizontal className="w-4 h-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-full sm:max-w-3xl">
+              <SheetHeader className="mb-4">
+                <SheetTitle>Bills Manager</SheetTitle>
+                <p className="text-sm text-muted-foreground">
+                  Add/decline suggestions, edit due days/amounts, and remove bills (removal also prevents re-suggestions).
+                </p>
+              </SheetHeader>
+
+              <BillsManagerContent
+                bills={bills}
+                suggestedVendors={suggestedVendors}
+                onAddBill={onAddBill}
+                onUpdateBill={onUpdateBill}
+                onRemoveBill={onRemoveBill}
+                onAddFromSuggestion={onAddFromSuggestion}
+                onDismissSuggestion={onDismissSuggestion}
+                maxHeight="70vh"
+              />
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+
+      {/* Compact sidebar view */}
+      <BillsManagerContent
+        bills={bills}
+        suggestedVendors={suggestedVendors}
+        onAddBill={onAddBill}
+        onUpdateBill={onUpdateBill}
+        onRemoveBill={onRemoveBill}
+        onAddFromSuggestion={onAddFromSuggestion}
+        onDismissSuggestion={onDismissSuggestion}
+        maxHeight="300px"
+      />
     </div>
   );
 }

@@ -1,61 +1,127 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Bill, SuggestedVendor } from '@/types/bills';
 import { Transaction } from '@/types/finance';
-import { extractVendorName } from '@/utils/financeUtils';
+import { normalizeVendor } from '@/utils/financeUtils';
 
 const STORAGE_KEY = 'cashflow_my_bills';
 const DISMISSED_KEY = 'cashflow_dismissed_bill_suggestions';
+const IGNORED_KEY = 'cashflow_ignored_vendors';
+
+/**
+ * Lovable/Vite previews can sometimes run in environments where `window` is not available.
+ * Guard all localStorage access so we never crash with "localStorage is not defined".
+ */
+function canUseStorage(): boolean {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+function safeGet(key: string): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSet(key: string, value: string) {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
+function safeKey(vendorLike: string): string {
+  return normalizeVendor(vendorLike).trim().toLowerCase();
+}
 
 export function useBills(transactions: Transaction[]) {
   const [bills, setBills] = useState<Bill[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return [];
-      }
+    const stored = safeGet(STORAGE_KEY);
+    if (!stored) return [];
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return [];
     }
-    return [];
   });
 
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Record<string, boolean>>(() => {
-    const stored = localStorage.getItem(DISMISSED_KEY);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return {};
-      }
+    const stored = safeGet(DISMISSED_KEY);
+    if (!stored) return {};
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return {};
     }
-    return {};
   });
 
-  // Persist to localStorage
+  /**
+   * Ignored vendors:
+   * - hides vendor from suggestions
+   * - prevents vendor from being re-added after you remove it from My Bills
+   */
+  const [ignoredVendors, setIgnoredVendors] = useState<Record<string, boolean>>(() => {
+    const stored = safeGet(IGNORED_KEY);
+    if (!stored) return {};
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return {};
+    }
+  });
+
+  // Persist to localStorage (guarded)
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(bills));
+    safeSet(STORAGE_KEY, JSON.stringify(bills));
   }, [bills]);
 
   useEffect(() => {
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissedSuggestions));
+    safeSet(DISMISSED_KEY, JSON.stringify(dismissedSuggestions));
   }, [dismissedSuggestions]);
 
+  useEffect(() => {
+    safeSet(IGNORED_KEY, JSON.stringify(ignoredVendors));
+  }, [ignoredVendors]);
+
   const dismissSuggestion = (vendor: string) => {
-    const key = vendor.trim().toLowerCase();
+    const key = safeKey(vendor);
     setDismissedSuggestions((prev) => ({ ...prev, [key]: true }));
+  };
+
+  const ignoreVendor = (vendor: string) => {
+    const key = safeKey(vendor);
+    setIgnoredVendors((prev) => ({ ...prev, [key]: true }));
+  };
+
+  const unignoreVendor = (vendor: string) => {
+    const key = safeKey(vendor);
+    setIgnoredVendors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   const restoreAllSuggestions = () => {
     setDismissedSuggestions({});
   };
 
+  const restoreAllIgnoredVendors = () => {
+    setIgnoredVendors({});
+  };
+
   // Find vendors that appear 2+ times as expenses but aren't in "My Bills" yet
   const suggestedVendors = useMemo<SuggestedVendor[]>(() => {
-    const existingVendors = new Set(bills.map(b => b.vendor.toLowerCase()));
+    const existingVendorKeys = new Set(bills.map(b => safeKey(b.vendor)));
     const dismissed = new Set(Object.keys(dismissedSuggestions).filter(k => dismissedSuggestions[k]));
-    
-    // Group transactions by vendor
+    const ignored = new Set(Object.keys(ignoredVendors).filter(k => ignoredVendors[k]));
+
+    // Group transactions by vendor key
     const vendorMap = new Map<string, { 
+      vendorLabel: string;
       amounts: number[]; 
       dates: Date[]; 
       category: string;
@@ -63,23 +129,26 @@ export function useBills(transactions: Transaction[]) {
     }>();
 
     transactions.forEach(tx => {
-      // Only consider expenses
+      // Only consider expenses (negative amounts). Debit handling differs per bank export, but
+      // Chase exports generally use negative for expenses.
       const isExpense = tx.amount < 0 || 
         (tx.amount > 0 && (tx.type || '').toLowerCase().includes('debit'));
-      
+
       if (!isExpense) return;
 
-      const vendor = extractVendorName(tx.description).toUpperCase();
-      
-      // Skip if already in My Bills
-      if (existingVendors.has(vendor.toLowerCase())) return;
+      const vendorKey = safeKey(tx.description);
+      const vendorLabel = normalizeVendor(tx.description); // normalized but display-friendly
 
-      // Skip if user dismissed this suggestion
-      if (dismissed.has(vendor.toLowerCase())) return;
+      // Skip if already in My Bills
+      if (existingVendorKeys.has(vendorKey)) return;
+
+      // Skip if user dismissed/ignored this suggestion
+      if (dismissed.has(vendorKey)) return;
+      if (ignored.has(vendorKey)) return;
 
       const txDate = new Date(tx.date);
-      const existing = vendorMap.get(vendor);
-      
+      const existing = vendorMap.get(vendorKey);
+
       if (existing) {
         existing.amounts.push(Math.abs(tx.amount));
         existing.dates.push(txDate);
@@ -88,7 +157,8 @@ export function useBills(transactions: Transaction[]) {
           existing.category = tx.category;
         }
       } else {
-        vendorMap.set(vendor, {
+        vendorMap.set(vendorKey, {
+          vendorLabel,
           amounts: [Math.abs(tx.amount)],
           dates: [txDate],
           category: tx.category,
@@ -99,13 +169,13 @@ export function useBills(transactions: Transaction[]) {
 
     // Filter to vendors with 2+ occurrences
     const suggestions: SuggestedVendor[] = [];
-    
-    vendorMap.forEach((data, vendor) => {
+
+    vendorMap.forEach((data, vendorKey) => {
       if (data.amounts.length < 2) return;
 
       // Calculate average amount
       const avgAmount = data.amounts.reduce((a, b) => a + b, 0) / data.amounts.length;
-      
+
       // Find most common day of month
       const dayCounts = new Map<number, number>();
       data.dates.forEach(d => {
@@ -122,7 +192,7 @@ export function useBills(transactions: Transaction[]) {
       });
 
       suggestions.push({
-        vendor,
+        vendor: data.vendorLabel,
         avgAmount: Math.round(avgAmount * 100) / 100,
         occurrences: data.amounts.length,
         lastSeen: data.lastSeen.toISOString().split('T')[0],
@@ -136,27 +206,25 @@ export function useBills(transactions: Transaction[]) {
       if (b.occurrences !== a.occurrences) return b.occurrences - a.occurrences;
       return b.avgAmount - a.avgAmount;
     });
-  }, [transactions, bills, dismissedSuggestions]);
+  }, [transactions, bills, dismissedSuggestions, ignoredVendors]);
 
   const addBill = (bill: Omit<Bill, 'id'>) => {
-    console.log('[useBills] Adding bill:', bill);
-    setBills(prev => {
-      const newBills = [...prev, { ...bill, id: `bill-${Date.now()}` }];
-      console.log('[useBills] Bills after add:', newBills);
-      return newBills;
-    });
+    setBills(prev => [...prev, { ...bill, id: `bill-${Date.now()}` }]);
   };
 
   const updateBill = (id: string, updates: Partial<Bill>) => {
     setBills(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
   };
 
+  /**
+   * Remove bill AND ignore the vendor so it won't immediately come back as a suggestion.
+   */
   const removeBill = (id: string) => {
-    setBills(prev => prev.filter(b => b.id !== id));
-  };
-
-  const clearAllBills = () => {
-    setBills([]);
+    setBills(prev => {
+      const bill = prev.find(b => b.id === id);
+      if (bill) ignoreVendor(bill.vendor);
+      return prev.filter(b => b.id !== id);
+    });
   };
 
   const addFromSuggestion = (suggestion: SuggestedVendor) => {
@@ -175,9 +243,12 @@ export function useBills(transactions: Transaction[]) {
     addBill,
     updateBill,
     removeBill,
-    clearAllBills,
     addFromSuggestion,
     dismissSuggestion,
     restoreAllSuggestions,
+    ignoredVendors,
+    ignoreVendor,
+    unignoreVendor,
+    restoreAllIgnoredVendors,
   };
 }
