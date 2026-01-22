@@ -303,6 +303,7 @@ const Index = () => {
                   bills={bills}
                   currentBalance={currentBalance}
                   nextCommission={nextCommission}
+                  onAddCommission={handleAddCommission}
                 />
                 <PayPeriodInfo selectedMonth={settings.selectedMonth} />
                 <RecurringSummary transactions={filteredTransactions} />

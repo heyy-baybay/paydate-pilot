@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
-import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp, ChevronDown, ChevronUp, Edit2, RefreshCw, X, Expand, PieChart } from 'lucide-react';
+import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp, ChevronDown, ChevronUp, Edit2, RefreshCw, X, Expand, PieChart, Plus } from 'lucide-react';
 import { Transaction, PayPeriod, TransactionCategory, PendingCommission } from '@/types/finance';
 import { extractVendorName, formatCurrency, getPayPeriods } from '@/utils/financeUtils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -13,7 +15,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import {
   Collapsible,
   CollapsibleContent,
@@ -34,6 +35,7 @@ interface UpcomingBillsBeforePaydayProps {
   selectedMonth: string | null;
   nextCommission: PendingCommission | null;
   onUpdateTransaction?: (id: string, updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>) => void;
+  onAddCommission?: (commission: Omit<PendingCommission, 'id'>) => void;
 }
 
 interface TransactionHistory {
@@ -67,10 +69,16 @@ export function UpcomingBillsBeforePayday({
   selectedMonth: _selectedMonth,
   nextCommission,
   onUpdateTransaction,
+  onAddCommission,
 }: UpcomingBillsBeforePaydayProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingBill, setEditingBill] = useState<string | null>(null);
   const [expandedBills, setExpandedBills] = useState<Set<string>>(new Set());
+  
+  // Commission entry form state
+  const [showCommissionForm, setShowCommissionForm] = useState(false);
+  const [commissionAmount, setCommissionAmount] = useState('');
+  const [commissionDate, setCommissionDate] = useState('');
 
   const today = new Date();
   // Normalize to day-level comparisons so bills due "today" don't get pushed to next month
@@ -332,37 +340,37 @@ export function UpcomingBillsBeforePayday({
           <Clock className="w-5 h-5 text-primary" />
           <h3 className="font-semibold">Bills Before Next Payday</h3>
         </div>
-        {billsBeforePayday.length > 0 && (
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground hover:text-foreground">
-                <Expand className="w-4 h-4 mr-1" />
-                <span className="text-xs">Details</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="w-full sm:max-w-lg">
-              <SheetHeader>
-                <SheetTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-primary" />
-                  Bills Before Next Payday
-                </SheetTitle>
-              </SheetHeader>
-              
-              <ScrollArea className="h-[calc(100vh-120px)] mt-6 pr-4">
-                {/* Summary Section */}
-                <div className="space-y-4 mb-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-lg bg-expense/10 border border-expense/20">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Bills</p>
-                      <p className="text-2xl font-bold font-mono text-expense">{formatCurrency(totalNeeded)}</p>
-                    </div>
-                    <div className="p-4 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Balance</p>
-                      <p className="text-2xl font-bold font-mono">{formatCurrency(currentBalance)}</p>
-                    </div>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground hover:text-foreground">
+              <Expand className="w-4 h-4 mr-1" />
+              <span className="text-xs">Expand</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="w-full sm:max-w-lg">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-primary" />
+                Bills Before Next Payday
+              </SheetTitle>
+            </SheetHeader>
+            
+            <ScrollArea className="h-[calc(100vh-120px)] mt-6 pr-4">
+              {/* Summary Section */}
+              <div className="space-y-4 mb-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-lg bg-expense/10 border border-expense/20">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Bills Due</p>
+                    <p className="text-2xl font-bold font-mono text-expense">{formatCurrency(totalNeeded)}</p>
                   </div>
+                  <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Balance</p>
+                    <p className="text-2xl font-bold font-mono">{formatCurrency(currentBalance)}</p>
+                  </div>
+                </div>
 
-                  {/* Balance Bar */}
+                {/* Balance Bar */}
+                {totalNeeded > 0 && (
                   <div className="p-4 rounded-lg bg-muted/30 border border-border">
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-muted-foreground">Coverage</span>
@@ -380,19 +388,150 @@ export function UpcomingBillsBeforePayday({
                       </p>
                     )}
                   </div>
+                )}
 
-                  {nextCommission && (
-                    <div className="p-4 rounded-lg bg-income/10 border border-income/20">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">After Commission</p>
-                      <p className="text-2xl font-bold font-mono text-income">
-                        {formatCurrency(currentBalance - totalNeeded + nextCommission.amount)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Commission: {formatCurrency(nextCommission.amount)} on {formatPayDate(nextCommission.expectedDate)}
+                {/* Expected Commission Section */}
+                <div className="p-4 rounded-lg bg-income/10 border border-income/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-income" />
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                        Expected Commission
                       </p>
                     </div>
+                    {!nextCommission && onAddCommission && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 px-2 text-income"
+                        onClick={() => setShowCommissionForm(!showCommissionForm)}
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Commission Entry Form */}
+                  {showCommissionForm && !nextCommission && onAddCommission && (
+                    <div className="space-y-3 mb-4 pb-4 border-b border-income/20">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Amount</Label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="15987.04"
+                            value={commissionAmount}
+                            onChange={(e) => setCommissionAmount(e.target.value)}
+                            className="h-8 pl-7 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Expected Date</Label>
+                        <Input
+                          type="date"
+                          value={commissionDate}
+                          onChange={(e) => setCommissionDate(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs flex-1"
+                          onClick={() => {
+                            const amount = parseFloat(commissionAmount);
+                            if (!isNaN(amount) && amount > 0 && commissionDate) {
+                              onAddCommission({
+                                amount,
+                                expectedDate: new Date(commissionDate),
+                                cutoffDate: '',
+                              });
+                              setCommissionAmount('');
+                              setCommissionDate('');
+                              setShowCommissionForm(false);
+                            }
+                          }}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            setShowCommissionForm(false);
+                            setCommissionAmount('');
+                            setCommissionDate('');
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {nextCommission ? (
+                    <>
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xl font-bold font-mono text-income">
+                          {formatCurrency(nextCommission.amount)}
+                        </p>
+                        <span className="text-sm text-muted-foreground">
+                          {formatPayDate(nextCommission.expectedDate)}
+                        </span>
+                      </div>
+                      
+                      {/* Calculation Breakdown */}
+                      <div className="pt-3 border-t border-income/20 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Current Balance</span>
+                          <span className="font-mono">{formatCurrency(currentBalance)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">− Bills Due</span>
+                          <span className="font-mono text-expense">−{formatCurrency(totalNeeded)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">+ Commission</span>
+                          <span className="font-mono text-income">+{formatCurrency(nextCommission.amount)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm pt-2 border-t border-income/20">
+                          <span className="font-semibold">Left Over After Bills</span>
+                          <span className={`text-lg font-bold font-mono ${
+                            currentBalance - totalNeeded + nextCommission.amount >= 0 ? 'text-income' : 'text-expense'
+                          }`}>
+                            {formatCurrency(currentBalance - totalNeeded + nextCommission.amount)}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No commission entered. Add your expected payout to see projected balance.
+                    </p>
                   )}
                 </div>
+
+                {/* Amount to Keep */}
+                <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <DollarSign className="w-4 h-4 text-primary" />
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                      Amount to Keep in Account
+                    </p>
+                  </div>
+                  <p className="text-2xl font-bold font-mono text-primary">
+                    {formatCurrency(totalNeeded)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Keep this amount to cover all bills until next payday
+                  </p>
+                </div>
+              </div>
 
                 {/* Category Breakdown */}
                 <div className="mb-6">
@@ -492,7 +631,6 @@ export function UpcomingBillsBeforePayday({
               </ScrollArea>
             </SheetContent>
           </Sheet>
-        )}
       </div>
 
       {billsBeforePayday.length === 0 && transactions.length > 0 && (
