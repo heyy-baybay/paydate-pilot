@@ -417,6 +417,50 @@ export function BillsBeforePayday({
         </div>
       )}
 
+      {/* Expected Commission & Left Over - using data from Expected Commission box */}
+      {nextCommission && (
+        <div className="p-4 rounded-lg bg-income/10 border border-income/20 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-income" />
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">
+              Expected Commission
+            </p>
+          </div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xl font-bold font-mono text-income">
+              {formatCurrency(nextCommission.amount)}
+            </p>
+            <span className="text-sm text-muted-foreground">
+              {formatPayDate(new Date(nextCommission.expectedDate))}
+            </span>
+          </div>
+          
+          {/* Calculation Breakdown */}
+          <div className="pt-3 border-t border-income/20 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Current Balance</span>
+              <span className="font-mono">{formatCurrency(currentBalance)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">− Bills Due</span>
+              <span className="font-mono text-expense">−{formatCurrency(totalNeeded)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">+ Commission</span>
+              <span className="font-mono text-income">+{formatCurrency(nextCommission.amount)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm pt-2 border-t border-income/20">
+              <span className="font-semibold">Left Over After Bills</span>
+              <span className={`text-lg font-bold font-mono ${
+                leftOverAfterBills >= 0 ? 'text-income' : 'text-expense'
+              }`}>
+                {formatCurrency(leftOverAfterBills)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Amount to Keep */}
       <div className="p-4 rounded-lg bg-primary/10 mb-4">
         <div className="flex items-center gap-2 mb-1">
