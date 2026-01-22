@@ -7,8 +7,10 @@ import { MonthFilter } from '@/components/MonthFilter';
 import { BalanceSettings } from '@/components/BalanceSettings';
 import { RecurringSummary } from '@/components/RecurringSummary';
 import { PayPeriodInfo } from '@/components/PayPeriodInfo';
-import { UpcomingBillsBeforePayday } from '@/components/UpcomingBillsBeforePayday';
+import { MyBills } from '@/components/MyBills';
+import { BillsBeforePayday } from '@/components/BillsBeforePayday';
 import { ExpectedCommission, PendingCommission } from '@/components/ExpectedCommission';
+import { useBills } from '@/hooks/useBills';
 import { Transaction, FinanceSettings } from '@/types/finance';
 import { 
   parseCSV, 
@@ -141,6 +143,16 @@ const Index = () => {
   // Get current balance (most recent transaction)
   const currentBalance = transactions[0]?.runningBalance || settings.startingBalance;
 
+  // Bills hook - uses transactionsWithOverrides for suggestions
+  const {
+    bills,
+    suggestedVendors,
+    addBill,
+    updateBill,
+    removeBill,
+    addFromSuggestion,
+  } = useBills(transactionsWithOverrides);
+
   const handleCSVUpload = (content: string) => {
     console.log('[CSVUpload] Replacing data');
     setRawData(content);
@@ -244,12 +256,18 @@ const Index = () => {
                   onAdd={handleAddCommission}
                   onRemove={handleRemoveCommission}
                 />
-                <UpcomingBillsBeforePayday 
-                  transactions={transactionsWithOverrides}
+                <MyBills
+                  bills={bills}
+                  suggestedVendors={suggestedVendors}
+                  onAddBill={addBill}
+                  onUpdateBill={updateBill}
+                  onRemoveBill={removeBill}
+                  onAddFromSuggestion={addFromSuggestion}
+                />
+                <BillsBeforePayday
+                  bills={bills}
                   currentBalance={currentBalance}
-                  selectedMonth={settings.selectedMonth}
                   nextCommission={nextCommission}
-                  onUpdateTransaction={handleUpdateTransaction}
                 />
                 <PayPeriodInfo selectedMonth={settings.selectedMonth} />
                 <RecurringSummary transactions={filteredTransactions} />
