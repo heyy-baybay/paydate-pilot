@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Upload, FileSpreadsheet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -10,9 +10,10 @@ interface CSVUploaderProps {
 export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((file: File) => {
-    if (!file.name.endsWith('.csv')) {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
       alert('Please upload a CSV file');
       return;
     }
@@ -28,6 +29,7 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
     
     const file = e.dataTransfer.files[0];
@@ -36,22 +38,27 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback(() => {
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
   }, []);
 
   const handleClick = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) handleFile(file);
-    };
-    input.click();
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }, [handleFile]);
 
   const handleClear = useCallback(() => {
@@ -69,6 +76,13 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
         <Button variant="ghost" size="icon" onClick={handleClear}>
           <X className="w-4 h-4" />
         </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          onChange={handleInputChange}
+          className="hidden"
+        />
       </div>
     );
   }
@@ -81,6 +95,13 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
       onDragLeave={handleDragLeave}
       onClick={handleClick}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        onChange={handleInputChange}
+        className="hidden"
+      />
       <div className="flex flex-col items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
           <Upload className="w-8 h-8 text-primary" />
