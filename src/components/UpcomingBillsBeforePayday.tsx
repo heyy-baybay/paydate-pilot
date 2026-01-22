@@ -36,6 +36,12 @@ interface UpcomingBillsBeforePaydayProps {
   onUpdateTransaction?: (id: string, updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>) => void;
 }
 
+interface TransactionHistory {
+  date: string;
+  amount: number;
+  description: string;
+}
+
 interface RecurringBill {
   id: string;
   vendor: string;
@@ -44,6 +50,7 @@ interface RecurringBill {
   lastSeen: string;
   category: TransactionCategory;
   transactionId: string;
+  history: TransactionHistory[];
 }
 
 const CATEGORIES: TransactionCategory[] = [
@@ -101,7 +108,13 @@ export function UpcomingBillsBeforePayday({
     const dayOfMonth = txDate.getDate();
     
     const existing = vendorBills.get(vendor);
-    if (!existing || new Date(tx.date) > new Date(existing.lastSeen)) {
+    const historyEntry: TransactionHistory = {
+      date: tx.date,
+      amount: Math.abs(tx.amount),
+      description: tx.description,
+    };
+    
+    if (!existing) {
       vendorBills.set(vendor, {
         id: vendor,
         vendor,
@@ -110,8 +123,26 @@ export function UpcomingBillsBeforePayday({
         lastSeen: tx.date,
         category: tx.category,
         transactionId: tx.id,
+        history: [historyEntry],
       });
+    } else {
+      // Add to history
+      existing.history.push(historyEntry);
+      // Update to most recent if newer
+      if (new Date(tx.date) > new Date(existing.lastSeen)) {
+        existing.amount = Math.abs(tx.amount);
+        existing.expectedDate = dayOfMonth;
+        existing.lastSeen = tx.date;
+        existing.category = tx.category;
+        existing.transactionId = tx.id;
+      }
+      vendorBills.set(vendor, existing);
     }
+  });
+
+  // Sort history for each bill (most recent first)
+  vendorBills.forEach(bill => {
+    bill.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   });
 
   const billsBeforePayday: RecurringBill[] = [];
@@ -291,34 +322,68 @@ export function UpcomingBillsBeforePayday({
                   </div>
                 </div>
 
-                {/* All Bills List */}
                 <div>
                   <h4 className="font-semibold text-sm mb-4">All {billsBeforePayday.length} Bills</h4>
                   <div className="space-y-2">
                     {billsBeforePayday.map((bill) => (
-                      <div 
-                        key={bill.id} 
-                        className="p-3 rounded-lg bg-muted/50 border border-border"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                            <span className="text-sm font-medium truncate" title={bill.vendor}>
-                              {bill.vendor}
-                            </span>
-                          </div>
-                          <span className="font-mono text-sm font-semibold text-expense">
-                            {formatCurrency(bill.amount)}
-                          </span>
+                      <Collapsible key={bill.id}>
+                        <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                          <CollapsibleTrigger asChild>
+                            <div className="cursor-pointer">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                                  <span className="text-sm font-medium truncate" title={bill.vendor}>
+                                    {bill.vendor}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-sm font-semibold text-expense">
+                                    {formatCurrency(bill.amount)}
+                                  </span>
+                                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>~{getOrdinal(bill.expectedDate)} of month</span>
+                                <span>•</span>
+                                <Badge variant="secondary" className={`${getCategoryColor(bill.category)} text-xs px-1.5 py-0`}>
+                                  {bill.category}
+                                </Badge>
+                                <span>•</span>
+                                <span className="text-primary">{bill.history.length} occurrence{bill.history.length !== 1 ? 's' : ''}</span>
+                              </div>
+                            </div>
+                          </CollapsibleTrigger>
+                          
+                          <CollapsibleContent>
+                            <div className="mt-3 pt-3 border-t border-border space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                Transaction History
+                              </p>
+                              {bill.history.map((entry, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-xs p-2 rounded bg-background/50">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate" title={entry.description}>
+                                      {entry.description}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      {new Date(entry.date).toLocaleDateString('en-US', { 
+                                        month: 'short', 
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })}
+                                    </p>
+                                  </div>
+                                  <span className="font-mono text-expense font-medium ml-2">
+                                    {formatCurrency(entry.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>~{getOrdinal(bill.expectedDate)} of month</span>
-                          <span>•</span>
-                          <Badge variant="secondary" className={`${getCategoryColor(bill.category)} text-xs px-1.5 py-0`}>
-                            {bill.category}
-                          </Badge>
-                        </div>
-                      </div>
+                      </Collapsible>
                     ))}
                   </div>
                 </div>
