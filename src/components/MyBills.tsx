@@ -88,9 +88,9 @@ export function MyBills({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ScrollArea className="max-h-[200px] mt-2">
+            <ScrollArea className="h-[300px] mt-2 pr-2">
               <div className="space-y-2">
-                {suggestedVendors.slice(0, 10).map((suggestion) => (
+                {suggestedVendors.map((suggestion) => (
                   <div
                     key={suggestion.vendor}
                     className="flex items-center justify-between p-2 rounded-lg bg-muted/50 border border-border"
@@ -115,6 +115,9 @@ export function MyBills({
                 ))}
               </div>
             </ScrollArea>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              {suggestedVendors.length} vendor{suggestedVendors.length !== 1 ? 's' : ''} suggested
+            </p>
           </CollapsibleContent>
         </Collapsible>
       )}
