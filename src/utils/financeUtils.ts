@@ -33,31 +33,55 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-// Category detection based on description
+// Category detection based on description - aligned with QuickBooks
 const categoryPatterns: Record<TransactionCategory, RegExp[]> = {
-  'Subscriptions': [/spotify/i, /netflix/i, /hulu/i, /apple/i, /google.*storage/i, /dialpad/i, /cloudflare/i, /squarespace/i, /sqsp/i, /lovable/i],
-  'Fuel': [/valero/i, /shell/i, /exxon/i, /chevron/i, /fuel/i, /gas/i, /pilot/i, /ta\s/i, /loves/i, /petro/i],
-  'Software': [/github/i, /adobe/i, /microsoft/i, /zoom/i, /slack/i, /aws/i, /heroku/i, /front\.com/i, /cargado/i],
-  'Suppliers': [/supplier/i, /wholesale/i, /parts/i, /equipment/i, /volpe/i, /beam/i],
-  'Utilities': [/utility/i, /electric/i, /water/i, /power/i, /energy/i],
-  'Transfers': [/transfer/i, /xfer/i, /acct_xfer/i, /zelle/i, /venmo/i, /paypal/i],
-  'Fees': [/fee/i, /charge/i, /overdraft/i, /nsf/i, /service charge/i],
-  'Income': [/deposit/i, /credit/i, /invoice/i, /payment.*received/i, /margin freight/i, /ach_credit/i],
-  'Taxes': [/revenue.*department/i, /irs/i, /tax/i, /state.*tax/i],
+  'Gas': [/valero/i, /shell/i, /exxon/i, /chevron/i, /fuel/i, /gas/i, /pilot/i, /ta\s/i, /loves/i, /petro/i, /fuel maxx/i],
+  'Travel': [/hotel/i, /airline/i, /southwest/i, /delta/i, /united/i, /marriott/i, /hilton/i, /uber/i, /lyft/i, /travel/i],
+  'Legal & Accounting': [/legalzoom/i, /attorney/i, /lawyer/i, /accountant/i, /cpa/i, /legal/i],
+  'Office Supplies': [/office depot/i, /staples/i, /customink/i, /office supplies/i],
+  'Software': [/github/i, /adobe/i, /microsoft/i, /zoom/i, /slack/i, /aws/i, /heroku/i, /front\.com/i, /cargado/i, /dun.*bradstreet/i, /software/i],
+  'Repairs & Maintenance': [/repair/i, /maintenance/i, /maid sense/i, /mechanic/i, /service/i],
+  'Postage': [/usps/i, /ups/i, /fedex/i, /postal/i, /postage/i, /shipping/i],
+  'Taxes & Registration': [/revenue.*department/i, /irs/i, /tax/i, /state.*tax/i, /registration/i, /bonfire/i],
   'Insurance': [/insurance/i, /geico/i, /allstate/i, /progressive/i, /state farm/i, /hendersh/i],
+  'Subscriptions': [/spotify/i, /netflix/i, /hulu/i, /apple/i, /google.*storage/i, /dialpad/i, /cloudflare/i, /squarespace/i, /sqsp/i, /lovable/i, /audible/i],
+  'Sales': [/invoice/i, /payment.*received/i, /margin freight/i],
+  "Owner's Contribution": [/owner.*contribution/i, /capital.*contribution/i],
+  "Owner's Distribution": [/owner.*distribution/i, /draw/i, /personal/i],
+  'Transfers': [/transfer/i, /xfer/i, /acct_xfer/i, /zelle/i, /venmo/i, /paypal/i, /payment thank you/i, /credit card payment/i],
+  'Fees': [/fee/i, /charge/i, /overdraft/i, /nsf/i, /service charge/i],
   'Miscellaneous': [],
 };
 
-export function categorizeTransaction(description: string, type: string, amount: number): TransactionCategory {
+export function categorizeTransaction(description: string, type: string, amount: number, qbCategory?: string): TransactionCategory {
+  // If we have a QuickBooks category, use it directly
+  if (qbCategory) {
+    const qbLower = qbCategory.toLowerCase();
+    if (qbLower.includes('gas') || qbLower.includes('fuel')) return 'Gas';
+    if (qbLower.includes('travel')) return 'Travel';
+    if (qbLower.includes('legal') || qbLower.includes('accounting')) return 'Legal & Accounting';
+    if (qbLower.includes('office supplies')) return 'Office Supplies';
+    if (qbLower.includes('software')) return 'Software';
+    if (qbLower.includes('repair') || qbLower.includes('maintenance')) return 'Repairs & Maintenance';
+    if (qbLower.includes('postage') || qbLower.includes('shipping')) return 'Postage';
+    if (qbLower.includes('tax') || qbLower.includes('registration')) return 'Taxes & Registration';
+    if (qbLower.includes('insurance')) return 'Insurance';
+    if (qbLower.includes('subscription')) return 'Subscriptions';
+    if (qbLower.includes('sales') || qbLower.includes('income') || qbLower.includes('revenue')) return 'Sales';
+    if (qbLower.includes('owner\'s contribution') || qbLower.includes('capital')) return "Owner's Contribution";
+    if (qbLower.includes('owner\'s distribution') || qbLower.includes('draw')) return "Owner's Distribution";
+    if (qbLower.includes('due from') || qbLower.includes('transfer')) return 'Transfers';
+  }
+  
   const cleanDesc = description.toLowerCase();
   
-  // Check if it's income first
+  // Check if it's income first (positive amounts)
   if (amount > 0 || type.toLowerCase().includes('credit')) {
-    for (const pattern of categoryPatterns['Income']) {
-      if (pattern.test(cleanDesc)) return 'Income';
+    for (const pattern of categoryPatterns['Sales']) {
+      if (pattern.test(cleanDesc)) return 'Sales';
     }
-    if (type.toLowerCase().includes('credit') || type.toLowerCase().includes('ach_credit')) {
-      return 'Income';
+    if (type.toLowerCase().includes('credit') || type.toLowerCase().includes('ach_credit') || type.toLowerCase().includes('deposit')) {
+      return 'Sales';
     }
   }
   
@@ -68,7 +92,7 @@ export function categorizeTransaction(description: string, type: string, amount:
   
   // Check other categories
   for (const [category, patterns] of Object.entries(categoryPatterns)) {
-    if (category === 'Income' || category === 'Miscellaneous') continue;
+    if (category === 'Sales' || category === 'Miscellaneous') continue;
     for (const pattern of patterns) {
       if (pattern.test(cleanDesc)) return category as TransactionCategory;
     }
@@ -77,21 +101,61 @@ export function categorizeTransaction(description: string, type: string, amount:
   return 'Miscellaneous';
 }
 
-// Detect recurring transactions
+// Detect recurring transactions based on:
+// 1. Same vendor appearing multiple times
+// 2. Similar day of month (±3 days)
+// 3. Similar amount (±$10)
 export function detectRecurring(transactions: Transaction[]): Map<string, boolean> {
-  const vendorCounts = new Map<string, number>();
   const recurringMap = new Map<string, boolean>();
   
-  // Extract vendor names and count occurrences
+  // Group transactions by vendor
+  const vendorTransactions = new Map<string, Transaction[]>();
   transactions.forEach(tx => {
     const vendor = extractVendorName(tx.description);
-    vendorCounts.set(vendor, (vendorCounts.get(vendor) || 0) + 1);
+    const existing = vendorTransactions.get(vendor) || [];
+    existing.push(tx);
+    vendorTransactions.set(vendor, existing);
   });
   
-  // Mark as recurring if vendor appears 2+ times
+  // For each transaction, check if it has a recurring pattern
   transactions.forEach(tx => {
     const vendor = extractVendorName(tx.description);
-    recurringMap.set(tx.id, (vendorCounts.get(vendor) || 0) >= 2);
+    const vendorTxs = vendorTransactions.get(vendor) || [];
+    
+    // Need at least 2 transactions from same vendor
+    if (vendorTxs.length < 2) {
+      recurringMap.set(tx.id, false);
+      return;
+    }
+    
+    const txDate = new Date(tx.date);
+    const txDay = txDate.getDate();
+    const txAmount = Math.abs(tx.amount);
+    
+    // Check if there's another transaction with similar day and amount
+    const hasRecurringPattern = vendorTxs.some(otherTx => {
+      if (otherTx.id === tx.id) return false;
+      
+      const otherDate = new Date(otherTx.date);
+      const otherDay = otherDate.getDate();
+      const otherAmount = Math.abs(otherTx.amount);
+      
+      // Check day of month is within ±3 days (handle month wraparound)
+      const dayDiff = Math.min(
+        Math.abs(txDay - otherDay),
+        Math.abs(txDay - otherDay + 31),
+        Math.abs(txDay - otherDay - 31)
+      );
+      const isSimilarDay = dayDiff <= 3;
+      
+      // Check amount is within ±$10
+      const amountDiff = Math.abs(txAmount - otherAmount);
+      const isSimilarAmount = amountDiff <= 10;
+      
+      return isSimilarDay && isSimilarAmount;
+    });
+    
+    recurringMap.set(tx.id, hasRecurringPattern);
   });
   
   return recurringMap;
@@ -308,6 +372,7 @@ function parseQuickBooksCSV(lines: string[]): RawTransaction[] {
       type: type,
       balance: 0, // QuickBooks doesn't provide running balance
       checkOrSlip: undefined,
+      qbCategory: accountFullName.replace(/^"|"$/g, ''), // Preserve QuickBooks category
     });
   }
   
@@ -381,7 +446,7 @@ export function processTransactions(
     amount: tx.amount,
     type: tx.type,
     isRecurring: false,
-    category: categorizeTransaction(tx.description, tx.type, tx.amount),
+    category: categorizeTransaction(tx.description, tx.type, tx.amount, tx.qbCategory),
     payPeriodImpact: determinePayPeriodImpact(parseDate(tx.postingDate)),
     runningBalance: 0,
     originalBalance: tx.balance,
