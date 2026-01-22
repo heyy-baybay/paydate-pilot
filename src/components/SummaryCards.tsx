@@ -39,12 +39,14 @@ export function SummaryCards({ summary, currentBalance }: SummaryCardsProps) {
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {stats.map((stat) => {
         const isNegativeBalance = stat.label === 'Current Balance' && currentBalance < 0;
+        const isLowBalance = stat.label === 'Current Balance' && currentBalance >= 0 && currentBalance < 1000;
         
         return (
           <div 
             key={stat.label} 
             className={`stat-card animate-fade-in ${
-              isNegativeBalance ? 'border-expense bg-expense/5' : ''
+              isNegativeBalance ? 'border-expense bg-expense/5' : 
+              isLowBalance ? 'border-warning bg-warning/5' : ''
             }`}
           >
             <div className="flex items-start justify-between">
@@ -54,6 +56,7 @@ export function SummaryCards({ summary, currentBalance }: SummaryCardsProps) {
                 </p>
                 <p className={`text-2xl font-bold mt-1 font-mono ${
                   isNegativeBalance ? 'text-expense' :
+                  isLowBalance ? 'text-warning' :
                   stat.trend === 'positive' ? 'text-income' : 
                   stat.trend === 'negative' ? 'text-expense' : 
                   'text-foreground'
@@ -63,12 +66,14 @@ export function SummaryCards({ summary, currentBalance }: SummaryCardsProps) {
               </div>
               <div className={`p-2 rounded-lg ${
                 isNegativeBalance ? 'bg-expense/10' :
+                isLowBalance ? 'bg-warning/10' :
                 stat.trend === 'positive' ? 'bg-income/10' : 
                 stat.trend === 'negative' ? 'bg-expense/10' : 
                 'bg-muted'
               }`}>
                 <stat.icon className={`w-5 h-5 ${
                   isNegativeBalance ? 'text-expense' :
+                  isLowBalance ? 'text-warning' :
                   stat.trend === 'positive' ? 'text-income' : 
                   stat.trend === 'negative' ? 'text-expense' : 
                   'text-muted-foreground'
