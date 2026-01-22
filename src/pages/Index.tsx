@@ -184,10 +184,11 @@ const Index = () => {
     }));
   };
 
-  // Get next expected commission
+  // Get next expected commission (coerce dates from localStorage strings)
+  const now = new Date();
   const nextCommission = pendingCommissions
-    .filter(c => c.expectedDate >= new Date())
-    .sort((a, b) => a.expectedDate.getTime() - b.expectedDate.getTime())[0] || null;
+    .filter(c => new Date(c.expectedDate) >= now)
+    .sort((a, b) => new Date(a.expectedDate).getTime() - new Date(b.expectedDate).getTime())[0] || null;
 
   return (
     <div className="min-h-screen bg-background">

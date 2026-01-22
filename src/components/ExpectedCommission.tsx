@@ -45,14 +45,17 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
   };
 
   // Get next commission if any
+  // Safely coerce expectedDate to Date (could be string from localStorage)
+  const now = new Date();
   const nextCommission = commissions
-    .filter(c => c.expectedDate >= new Date())
-    .sort((a, b) => a.expectedDate.getTime() - b.expectedDate.getTime())[0];
+    .filter(c => new Date(c.expectedDate) >= now)
+    .sort((a, b) => new Date(a.expectedDate).getTime() - new Date(b.expectedDate).getTime())[0];
 
   const totalPending = commissions.reduce((sum, c) => sum + c.amount, 0);
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
+  const formatDate = (date: Date | string) => {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleDateString('en-US', { 
       weekday: 'short',
       month: 'short', 
       day: 'numeric' 

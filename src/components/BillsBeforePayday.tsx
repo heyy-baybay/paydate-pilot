@@ -46,8 +46,13 @@ export function BillsBeforePayday({
   }
 
   // Use commission date if provided and in future
-  const paydayCutoff = (nextCommission?.expectedDate && nextCommission.expectedDate > today)
-    ? nextCommission.expectedDate
+  // Safely coerce expectedDate to Date (could be string from localStorage)
+  const commissionDate = nextCommission?.expectedDate
+    ? new Date(nextCommission.expectedDate)
+    : null;
+
+  const paydayCutoff = (commissionDate && commissionDate > today)
+    ? commissionDate
     : nextPayPeriod?.paymentDate;
 
   const paydayCutoffEnd = paydayCutoff
