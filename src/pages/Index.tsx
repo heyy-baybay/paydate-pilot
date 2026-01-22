@@ -141,44 +141,15 @@ const Index = () => {
   // Get current balance (most recent transaction)
   const currentBalance = transactions[0]?.runningBalance || settings.startingBalance;
 
-  const handleCSVUpload = (content: string, merge = false) => {
-    console.log('[CSVUpload] merge:', merge, 'hasExistingData:', !!rawData);
-    
-    if (merge && rawData) {
-      // Merge: parse both CSVs separately to handle headers correctly, then combine
-      const existingTransactions = parseCSV(rawData);
-      const newTransactions = parseCSV(content);
-      console.log('[CSVUpload] Merging:', existingTransactions.length, 'existing +', newTransactions.length, 'new transactions');
-      
-      // Combine and dedupe by date+description+amount
-      const combined = [...existingTransactions];
-      const existingKeys = new Set(existingTransactions.map(t => 
-        `${t.postingDate}|${t.description}|${t.amount}`
-      ));
-      
-      for (const tx of newTransactions) {
-        const key = `${tx.postingDate}|${tx.description}|${tx.amount}`;
-        if (!existingKeys.has(key)) {
-          combined.push(tx);
-          existingKeys.add(key);
-        }
-      }
-      
-      console.log('[CSVUpload] Combined total:', combined.length, 'transactions');
-      
-      // Store combined as a synthetic CSV (we'll need to update how we store this)
-      // For now, just concatenate the raw data but the parser handles headers
-      setRawData(`${rawData}\n${content}`);
-    } else {
-      console.log('[CSVUpload] Replacing data');
-      setRawData(content);
-      // Auto-detect starting balance from oldest transaction (only on replace)
-      const parsed = parseCSV(content);
-      if (parsed.length > 0) {
-        const oldest = parsed[parsed.length - 1];
-        const inferredStart = oldest.balance - oldest.amount;
-        setSettings(s => ({ ...s, startingBalance: inferredStart }));
-      }
+  const handleCSVUpload = (content: string) => {
+    console.log('[CSVUpload] Replacing data');
+    setRawData(content);
+    // Auto-detect starting balance from oldest transaction
+    const parsed = parseCSV(content);
+    if (parsed.length > 0) {
+      const oldest = parsed[parsed.length - 1];
+      const inferredStart = oldest.balance - oldest.amount;
+      setSettings(s => ({ ...s, startingBalance: inferredStart }));
     }
   };
 
