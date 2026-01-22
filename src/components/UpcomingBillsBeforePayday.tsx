@@ -512,7 +512,7 @@ export function UpcomingBillsBeforePayday({
                           {bill.vendor}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <span className="font-mono text-sm font-semibold text-expense">
                           {formatCurrency(bill.amount)}
                         </span>
@@ -521,13 +521,25 @@ export function UpcomingBillsBeforePayday({
                           size="sm"
                           className="h-6 w-6 p-0"
                           onClick={() => setEditingBill(editingBill === bill.id ? null : bill.id)}
+                          title="Edit bill"
                         >
                           {editingBill === bill.id ? (
-                            <X className="w-3 h-3" />
+                            <ChevronUp className="w-3 h-3" />
                           ) : (
                             <Edit2 className="w-3 h-3" />
                           )}
                         </Button>
+                        {onUpdateTransaction && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-expense hover:bg-expense/10"
+                            onClick={() => handleRecurringToggle(bill.transactionId, false)}
+                            title="Remove from recurring bills"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        )}
                       </div>
                     </div>
 
