@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp, ChevronDown, ChevronUp, Edit2, RefreshCw, X, Expand, PieChart } from 'lucide-react';
 import { Transaction, PayPeriod, TransactionCategory, PendingCommission } from '@/types/finance';
-import { formatCurrency, getPayPeriods } from '@/utils/financeUtils';
+import { extractVendorName, formatCurrency, getPayPeriods } from '@/utils/financeUtils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -113,9 +113,57 @@ export function UpcomingBillsBeforePayday({
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
   
   const vendorBills = new Map<string, RecurringBill>();
+
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = (a: Date, b: Date) => Math.round((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
+  const addDays = (d: Date, days: number) => {
+    const next = new Date(d);
+    next.setDate(next.getDate() + days);
+    return next;
+  };
+
+  const predictNextBillDate = (bill: RecurringBill): Date => {
+    // Use actual timing deltas between occurrences when available.
+    // Falls back to day-of-month method for vendors with limited history.
+    const datesDesc = bill.history
+      .map((h) => startOfDay(new Date(h.date)))
+      .sort((a, b) => b.getTime() - a.getTime());
+
+    const lastSeen = startOfDay(new Date(bill.lastSeen));
+
+    if (datesDesc.length >= 2) {
+      const deltas: number[] = [];
+      for (let i = 0; i < Math.min(datesDesc.length - 1, 6); i++) {
+        const d = diffDays(datesDesc[i], datesDesc[i + 1]);
+        // Filter to plausible billing cycles (weekly to ~bi-monthly)
+        if (d >= 6 && d <= 62) deltas.push(d);
+      }
+
+      if (deltas.length > 0) {
+        deltas.sort((a, b) => a - b);
+        const median = deltas[Math.floor(deltas.length / 2)];
+        let predicted = addDays(lastSeen, median);
+        // If we're already past the predicted date, roll forward one more cycle.
+        if (predicted < todayStart) predicted = addDays(predicted, median);
+        return predicted;
+      }
+    }
+
+    // Fallback: assume monthly on last seen day-of-month.
+    const createClampedDate = (year: number, month: number, day: number) => {
+      const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+      return new Date(year, month, Math.min(day, lastDayOfMonth));
+    };
+
+    let expected = createClampedDate(todayStart.getFullYear(), todayStart.getMonth(), bill.expectedDate);
+    if (expected < todayStart) {
+      expected = createClampedDate(todayStart.getFullYear(), todayStart.getMonth() + 1, bill.expectedDate);
+    }
+    return expected;
+  };
   
   recurringExpenses.forEach(tx => {
-    const vendor = tx.description.split(/\s+/).slice(0, 2).join(' ').toUpperCase();
+    const vendor = extractVendorName(tx.description).toUpperCase();
     const txDate = new Date(tx.date);
     const dayOfMonth = txDate.getDate();
     
@@ -187,28 +235,10 @@ export function UpcomingBillsBeforePayday({
       )
     : null;
 
-  const createClampedDate = (year: number, month: number, day: number) => {
-    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-    return new Date(year, month, Math.min(day, lastDayOfMonth));
-  };
-  
   if (paydayCutoffEnd) {
     recentVendorBills.forEach((bill) => {
-      // Calculate when this bill would next occur based on expected date
-      let expectedBillDate = createClampedDate(
-        todayStart.getFullYear(),
-        todayStart.getMonth(),
-        bill.expectedDate
-      );
-
-      // If the expected date has already passed this month, it's next month
-      if (expectedBillDate < todayStart) {
-        expectedBillDate = createClampedDate(
-          todayStart.getFullYear(),
-          todayStart.getMonth() + 1,
-          bill.expectedDate
-        );
-      }
+      // Calculate when this bill would next occur based on the vendor's timing history.
+      const expectedBillDate = predictNextBillDate(bill);
 
       // Check if this expected bill date falls between today and the next payday
       if (expectedBillDate >= todayStart && expectedBillDate <= paydayCutoffEnd) {
