@@ -141,14 +141,19 @@ const Index = () => {
   // Get current balance (most recent transaction)
   const currentBalance = transactions[0]?.runningBalance || settings.startingBalance;
 
-  const handleCSVUpload = (content: string) => {
-    setRawData(content);
-    // Auto-detect starting balance from oldest transaction
-    const parsed = parseCSV(content);
-    if (parsed.length > 0) {
-      const oldest = parsed[parsed.length - 1];
-      const inferredStart = oldest.balance - oldest.amount;
-      setSettings(s => ({ ...s, startingBalance: inferredStart }));
+  const handleCSVUpload = (content: string, merge = false) => {
+    if (merge && rawData) {
+      // Merge: combine existing raw data with new content
+      setRawData(prev => prev ? `${prev}\n${content}` : content);
+    } else {
+      setRawData(content);
+      // Auto-detect starting balance from oldest transaction (only on replace)
+      const parsed = parseCSV(content);
+      if (parsed.length > 0) {
+        const oldest = parsed[parsed.length - 1];
+        const inferredStart = oldest.balance - oldest.amount;
+        setSettings(s => ({ ...s, startingBalance: inferredStart }));
+      }
     }
   };
 
