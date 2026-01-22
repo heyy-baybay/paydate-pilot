@@ -216,6 +216,10 @@ export function UpcomingBillsBeforePayday({
     return aDay - bDay;
   });
 
+  const recurringExpenseCount = recurringExpenses.length;
+  const vendorCount = vendorBills.size;
+  const recentVendorCount = recentVendorBills.size;
+
   const totalNeeded = billsBeforePayday.reduce((sum, bill) => sum + bill.amount, 0);
   const shortfall = totalNeeded - currentBalance;
   const isShort = shortfall > 0;
@@ -450,6 +454,26 @@ export function UpcomingBillsBeforePayday({
           </Sheet>
         )}
       </div>
+
+      {billsBeforePayday.length === 0 && transactions.length > 0 && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <p className="text-sm font-medium">No upcoming bills found in the current window.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Recurring expenses detected: <span className="font-mono">{recurringExpenseCount}</span> • Vendors (recent):{' '}
+            <span className="font-mono">{recentVendorCount}</span>/{vendorCount}
+            {paydayCutoffEnd ? (
+              <> • Window: {formatPayDate(todayStart)} → {formatPayDate(paydayCutoffEnd)}</>
+            ) : (
+              <> • Next payday not found</>
+            )}
+          </p>
+          {recurringExpenseCount === 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Tip: mark a transaction as “Recurring” in the table (or ensure your CSV includes enough history) so it can be predicted here.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Next Payday Info */}
       {nextPayPeriod && (

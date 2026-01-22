@@ -477,14 +477,62 @@ export function processTransactions(
   startingBalance: number
 ): Transaction[] {
   // Sort by date descending (newest first as in bank statement)
+  // Add stable tie-breakers so transaction ordering (and thus IDs) are deterministic.
   const sorted = [...raw].sort((a, b) => {
-    const dateA = new Date(parseDate(a.postingDate));
-    const dateB = new Date(parseDate(b.postingDate));
-    return dateB.getTime() - dateA.getTime();
+    const dateA = new Date(parseDate(a.postingDate)).getTime();
+    const dateB = new Date(parseDate(b.postingDate)).getTime();
+    if (dateB !== dateA) return dateB - dateA;
+
+    const descA = (a.description || '').toLowerCase();
+    const descB = (b.description || '').toLowerCase();
+    const descCmp = descA.localeCompare(descB);
+    if (descCmp !== 0) return descCmp;
+
+    if (a.amount !== b.amount) return b.amount - a.amount;
+
+    const typeA = (a.type || '').toLowerCase();
+    const typeB = (b.type || '').toLowerCase();
+    const typeCmp = typeA.localeCompare(typeB);
+    if (typeCmp !== 0) return typeCmp;
+
+    // Keep as last resort (should rarely matter)
+    return 0;
   });
+
+  // Deterministic transaction IDs are critical so local overrides (category/recurring)
+  // survive CSV re-uploads.
+  const fnv1a32 = (input: string) => {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      // 32-bit FNV-1a prime
+      hash = (hash * 0x01000193) >>> 0;
+    }
+    return hash;
+  };
+
+  const makeStableTxId = (rawTx: RawTransaction, occurrence: number) => {
+    const date = parseDate(rawTx.postingDate);
+    const desc = (rawTx.description || '').trim().toLowerCase();
+    const type = (rawTx.type || '').trim().toLowerCase();
+    const amount = Number(rawTx.amount) || 0;
+    const qb = (rawTx.qbCategory || '').trim().toLowerCase();
+
+    // Base key is deterministic across uploads.
+    const key = `${date}|${amount}|${type}|${desc}|${qb}|#${occurrence}`;
+    const hash = fnv1a32(key).toString(36);
+    return `tx_${hash}`;
+  };
+
+  const occurrenceCounter = new Map<string, number>();
   
-  const transactions: Transaction[] = sorted.map((tx, index) => ({
-    id: `tx-${index}-${Date.now()}`,
+  const transactions: Transaction[] = sorted.map((tx) => {
+    const baseKey = `${parseDate(tx.postingDate)}|${Number(tx.amount) || 0}|${(tx.type || '').trim().toLowerCase()}|${(tx.description || '').trim().toLowerCase()}|${(tx.qbCategory || '').trim().toLowerCase()}`;
+    const nextOccurrence = (occurrenceCounter.get(baseKey) ?? 0) + 1;
+    occurrenceCounter.set(baseKey, nextOccurrence);
+
+    return {
+    id: makeStableTxId(tx, nextOccurrence),
     date: parseDate(tx.postingDate),
     description: tx.description,
     amount: tx.amount,
@@ -494,7 +542,8 @@ export function processTransactions(
     payPeriodImpact: determinePayPeriodImpact(parseDate(tx.postingDate)),
     runningBalance: 0,
     originalBalance: tx.balance,
-  }));
+  };
+  });
   
   // Detect recurring
   const recurringMap = detectRecurring(transactions);
