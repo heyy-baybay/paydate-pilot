@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from 'sonner';
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,6 +20,7 @@ interface MyBillsProps {
   onUpdateBill: (id: string, updates: Partial<Bill>) => void;
   onRemoveBill: (id: string) => void;
   onAddFromSuggestion: (suggestion: SuggestedVendor) => void;
+  onDismissSuggestion: (vendor: string) => void;
 }
 
 function getOrdinal(n: number): string {
@@ -34,6 +36,7 @@ export function MyBills({
   onUpdateBill,
   onRemoveBill,
   onAddFromSuggestion,
+  onDismissSuggestion,
 }: MyBillsProps) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [showBills, setShowBills] = useState(true);
@@ -73,7 +76,7 @@ export function MyBills({
       {suggestedVendors.length > 0 && (
         <Collapsible open={showSuggestions} onOpenChange={setShowSuggestions} className="mb-4">
           <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="w-full flex items-center justify-between p-2 h-auto bg-primary/5 hover:bg-primary/10 rounded-lg">
+            <Button type="button" variant="ghost" className="w-full flex items-center justify-between p-2 h-auto bg-primary/5 hover:bg-primary/10 rounded-lg">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-primary" />
                 <span className="text-sm font-medium">
@@ -88,12 +91,26 @@ export function MyBills({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ScrollArea className="h-[300px] mt-2 pr-2">
-              <div className="space-y-2">
+            <ScrollArea className="h-[300px] mt-2">
+              {/* pr-4 prevents the Radix scrollbar from overlapping the action buttons */}
+              <div className="space-y-2 pr-4">
                 {suggestedVendors.map((suggestion) => (
                   <div
                     key={suggestion.vendor}
-                    className="flex items-center justify-between p-2 rounded-lg bg-muted/50 border border-border"
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border cursor-pointer select-none"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      onAddFromSuggestion(suggestion);
+                      toast.success('Added to My Bills', { description: suggestion.vendor });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onAddFromSuggestion(suggestion);
+                        toast.success('Added to My Bills', { description: suggestion.vendor });
+                      }
+                    }}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate" title={suggestion.vendor}>
@@ -103,14 +120,37 @@ export function MyBills({
                         ~{formatCurrency(suggestion.avgAmount)} • {suggestion.occurrences}x seen • ~{getOrdinal(suggestion.suggestedDueDay)}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-primary hover:text-primary hover:bg-primary/10"
-                      onClick={() => onAddFromSuggestion(suggestion)}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 px-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddFromSuggestion(suggestion);
+                          toast.success('Added to My Bills', { description: suggestion.vendor });
+                        }}
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="ml-1 text-xs">Add</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDismissSuggestion(suggestion.vendor);
+                          toast.message('Declined suggestion', { description: suggestion.vendor });
+                        }}
+                        title="Decline suggestion"
+                      >
+                        <X className="w-4 h-4" />
+                        <span className="ml-1 text-xs">Decline</span>
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
