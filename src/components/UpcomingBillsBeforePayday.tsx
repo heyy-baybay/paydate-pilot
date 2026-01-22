@@ -72,6 +72,9 @@ export function UpcomingBillsBeforePayday({
   const [editingBill, setEditingBill] = useState<string | null>(null);
 
   const today = new Date();
+  // Normalize to day-level comparisons so bills due "today" don't get pushed to next month
+  // just because the current time is later in the day.
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   // Bills-before-payday is a forward-looking view, so payday calculations should
   // always be anchored to *today* (not the month filter used for the table).
   const periods = getPayPeriods(today.getFullYear(), today.getMonth());
@@ -164,19 +167,44 @@ export function UpcomingBillsBeforePayday({
   const paydayCutoff = (nextCommission?.expectedDate && nextCommission.expectedDate > today)
     ? nextCommission.expectedDate
     : nextPayPeriod?.paymentDate;
+
+  const paydayCutoffEnd = paydayCutoff
+    ? new Date(
+        paydayCutoff.getFullYear(),
+        paydayCutoff.getMonth(),
+        paydayCutoff.getDate(),
+        23,
+        59,
+        59,
+        999
+      )
+    : null;
+
+  const createClampedDate = (year: number, month: number, day: number) => {
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+    return new Date(year, month, Math.min(day, lastDayOfMonth));
+  };
   
-  if (paydayCutoff) {
+  if (paydayCutoffEnd) {
     recentVendorBills.forEach((bill) => {
       // Calculate when this bill would next occur based on expected date
-      let expectedBillDate = new Date(today.getFullYear(), today.getMonth(), bill.expectedDate);
+      let expectedBillDate = createClampedDate(
+        todayStart.getFullYear(),
+        todayStart.getMonth(),
+        bill.expectedDate
+      );
 
       // If the expected date has already passed this month, it's next month
-      if (expectedBillDate <= today) {
-        expectedBillDate = new Date(today.getFullYear(), today.getMonth() + 1, bill.expectedDate);
+      if (expectedBillDate < todayStart) {
+        expectedBillDate = createClampedDate(
+          todayStart.getFullYear(),
+          todayStart.getMonth() + 1,
+          bill.expectedDate
+        );
       }
 
       // Check if this expected bill date falls between today and the next payday
-      if (expectedBillDate > today && expectedBillDate < paydayCutoff) {
+      if (expectedBillDate >= todayStart && expectedBillDate <= paydayCutoffEnd) {
         billsBeforePayday.push(bill);
       }
     });
