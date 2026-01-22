@@ -136,7 +136,7 @@ export function useBills(transactions: Transaction[]) {
       if (b.occurrences !== a.occurrences) return b.occurrences - a.occurrences;
       return b.avgAmount - a.avgAmount;
     });
-  }, [transactions, bills]);
+  }, [transactions, bills, dismissedSuggestions]);
 
   const addBill = (bill: Omit<Bill, 'id'>) => {
     setBills(prev => [...prev, { ...bill, id: `bill-${Date.now()}` }]);
