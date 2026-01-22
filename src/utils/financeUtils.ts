@@ -199,18 +199,58 @@ function parseQuickBooksAmount(amountStr: string): number {
   return parseFloat(cleaned) || 0;
 }
 
-// Parse CSV content (auto-detects format)
+// Parse CSV content (auto-detects format, handles merged files)
 export function parseCSV(content: string): RawTransaction[] {
   const lines = content.trim().split('\n');
   if (lines.length < 2) return [];
   
-  const format = detectCSVFormat(lines);
+  // Check if this might be a merged file with multiple CSV sections
+  const allTransactions: RawTransaction[] = [];
+  let currentSection: string[] = [];
+  let currentFormat: 'bank' | 'quickbooks' | null = null;
   
-  if (format === 'quickbooks') {
-    return parseQuickBooksCSV(lines);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineLower = line.toLowerCase();
+    
+    // Detect QuickBooks header
+    const isQuickBooksHeader = lineLower.includes('transaction type') && lineLower.includes('account name');
+    // Detect Bank header (Details,Posting Date,Description,Amount,Type,Balance)
+    const isBankHeader = lineLower.startsWith('details,') && lineLower.includes('posting date');
+    
+    if (isQuickBooksHeader || isBankHeader) {
+      // Parse previous section if we have one
+      if (currentSection.length > 0 && currentFormat) {
+        const parsed = currentFormat === 'quickbooks' 
+          ? parseQuickBooksCSV(currentSection)
+          : parseBankCSV(currentSection);
+        allTransactions.push(...parsed);
+      }
+      
+      // Start new section
+      currentSection = [line];
+      currentFormat = isQuickBooksHeader ? 'quickbooks' : 'bank';
+    } else if (currentFormat) {
+      currentSection.push(line);
+    } else {
+      // No header detected yet, accumulate lines
+      currentSection.push(line);
+    }
   }
   
-  return parseBankCSV(lines);
+  // Parse final section
+  if (currentSection.length > 0) {
+    // If no format detected, try to detect from accumulated lines
+    if (!currentFormat) {
+      currentFormat = detectCSVFormat(currentSection);
+    }
+    const parsed = currentFormat === 'quickbooks' 
+      ? parseQuickBooksCSV(currentSection)
+      : parseBankCSV(currentSection);
+    allTransactions.push(...parsed);
+  }
+  
+  return allTransactions;
 }
 
 // Parse QuickBooks Transaction List by Date format

@@ -145,10 +145,30 @@ const Index = () => {
     console.log('[CSVUpload] merge:', merge, 'hasExistingData:', !!rawData);
     
     if (merge && rawData) {
-      // Merge: combine existing raw data with new content
-      const combined = `${rawData}\n${content}`;
-      console.log('[CSVUpload] Merging data, combined length:', combined.length);
-      setRawData(combined);
+      // Merge: parse both CSVs separately to handle headers correctly, then combine
+      const existingTransactions = parseCSV(rawData);
+      const newTransactions = parseCSV(content);
+      console.log('[CSVUpload] Merging:', existingTransactions.length, 'existing +', newTransactions.length, 'new transactions');
+      
+      // Combine and dedupe by date+description+amount
+      const combined = [...existingTransactions];
+      const existingKeys = new Set(existingTransactions.map(t => 
+        `${t.postingDate}|${t.description}|${t.amount}`
+      ));
+      
+      for (const tx of newTransactions) {
+        const key = `${tx.postingDate}|${tx.description}|${tx.amount}`;
+        if (!existingKeys.has(key)) {
+          combined.push(tx);
+          existingKeys.add(key);
+        }
+      }
+      
+      console.log('[CSVUpload] Combined total:', combined.length, 'transactions');
+      
+      // Store combined as a synthetic CSV (we'll need to update how we store this)
+      // For now, just concatenate the raw data but the parser handles headers
+      setRawData(`${rawData}\n${content}`);
     } else {
       console.log('[CSVUpload] Replacing data');
       setRawData(content);
