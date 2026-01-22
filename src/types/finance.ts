@@ -6,6 +6,7 @@ export interface RawTransaction {
   type: string;
   balance: number;
   checkOrSlip?: string;
+  qbCategory?: string; // QuickBooks "Account full name" for category mapping
 }
 
 export interface Transaction {
@@ -21,17 +22,23 @@ export interface Transaction {
   originalBalance: number;
 }
 
+// Categories aligned with QuickBooks account names
 export type TransactionCategory = 
-  | 'Subscriptions'
-  | 'Fuel'
+  | 'Gas'
+  | 'Travel'
+  | 'Legal & Accounting'
+  | 'Office Supplies'
   | 'Software'
-  | 'Suppliers'
-  | 'Utilities'
+  | 'Repairs & Maintenance'
+  | 'Postage'
+  | 'Taxes & Registration'
+  | 'Insurance'
+  | 'Subscriptions'
+  | 'Sales'
+  | 'Owner\'s Contribution'
+  | 'Owner\'s Distribution'
   | 'Transfers'
   | 'Fees'
-  | 'Income'
-  | 'Taxes'
-  | 'Insurance'
   | 'Miscellaneous';
 
 export interface PayPeriod {

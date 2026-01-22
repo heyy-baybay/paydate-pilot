@@ -66,16 +66,21 @@ export function TransactionTable({ transactions, lowBalanceThreshold, onUpdateTr
 
   const getCategoryColor = (category: string) => {
     const colors: Record<string, string> = {
-      'Subscriptions': 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
-      'Fuel': 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+      'Gas': 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+      'Travel': 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+      'Legal & Accounting': 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+      'Office Supplies': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
       'Software': 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-      'Suppliers': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-      'Utilities': 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+      'Repairs & Maintenance': 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+      'Postage': 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
+      'Taxes & Registration': 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+      'Insurance': 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+      'Subscriptions': 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+      'Sales': 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      "Owner's Contribution": 'bg-green-500/10 text-green-600 dark:text-green-400',
+      "Owner's Distribution": 'bg-pink-500/10 text-pink-600 dark:text-pink-400',
       'Transfers': 'bg-slate-500/10 text-slate-600 dark:text-slate-400',
       'Fees': 'bg-red-500/10 text-red-600 dark:text-red-400',
-      'Income': 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-      'Taxes': 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-      'Insurance': 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
       'Miscellaneous': 'bg-gray-500/10 text-gray-600 dark:text-gray-400',
     };
     return colors[category] || colors['Miscellaneous'];
