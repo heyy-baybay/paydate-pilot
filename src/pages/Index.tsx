@@ -16,7 +16,8 @@ import {
   parseCSV, 
   processTransactions, 
   getUniqueMonths,
-  generateMonthSummary 
+  generateMonthSummary,
+  extractVendorName 
 } from '@/utils/financeUtils';
 
 const STORAGE_KEYS = {
@@ -182,6 +183,26 @@ const Index = () => {
       ...prev,
       [id]: { ...prev[id], ...updates }
     }));
+    
+    // When marking as recurring, auto-add to My Bills
+    if (updates.isRecurring === true) {
+      const tx = transactionsWithOverrides.find(t => t.id === id);
+      if (tx) {
+        const vendor = extractVendorName(tx.description);
+        const txDate = new Date(tx.date);
+        // Check if already in bills
+        const exists = bills.some(b => b.vendor.toLowerCase() === vendor.toLowerCase());
+        if (!exists) {
+          addBill({
+            vendor: vendor,
+            amount: Math.abs(tx.amount),
+            dueDay: txDate.getDate(),
+            category: tx.category,
+            active: true,
+          });
+        }
+      }
+    }
   };
 
   // Get next expected commission (coerce dates from localStorage strings)
