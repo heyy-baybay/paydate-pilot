@@ -132,92 +132,171 @@ export function categorizeTransaction(description: string, type: string, amount:
   return 'Miscellaneous';
 }
 
-// Detect recurring transactions based on:
-// 1. Same vendor appearing 3+ times
-// 2. Across at least 2 different calendar months
-// 3. Similar day of month (±5 days)
-// 4. Similar amount (±$10)
+/**
+ * Normalize vendor name for grouping:
+ * - Uppercase
+ * - Strip digits, phone numbers, extra punctuation
+ * - Remove common noise tokens (SQ*, PAYPAL*, VENMO*, etc.)
+ * - Collapse whitespace
+ */
+export function normalizeVendor(description: string): string {
+  let cleaned = description.toUpperCase();
+  
+  // Remove common payment processor prefixes
+  const noisePatterns = [
+    /^SQ\s*\*?/i,
+    /^PAYPAL\s*\*?/i,
+    /^VENMO\s*\*?/i,
+    /^APPLE\.COM\/BILL/i,
+    /^APPLE\s*PAY\s*/i,
+    /^GOOGLE\s*\*?/i,
+    /^AMZN\s*MKTP\s*/i,
+    /^AMAZON\s*/i,
+    /^TST\s*\*?/i,          // Toast payments
+    /^POS\s+(PURCHASE\s+)?/i,
+    /^PURCHASE\s+/i,
+    /^DEBIT\s+(CARD\s+)?/i,
+    /^RECURRING\s+/i,
+    /^ONLINE\s+(PAYMENT\s+)?/i,
+    /^ACH\s+(DEBIT\s+)?/i,
+    /^CHECKCARD\s+/i,
+    /^VISA\s+/i,
+    /^MASTERCARD\s+/i,
+  ];
+  
+  for (const pattern of noisePatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  
+  // Remove transaction IDs, dates, phone numbers, long digit sequences
+  cleaned = cleaned
+    .replace(/\d{2}\/\d{2}(\/\d{2,4})?/g, '')      // dates MM/DD or MM/DD/YY
+    .replace(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/g, '') // phone numbers
+    .replace(/\d{6,}/g, '')                         // long digit sequences (6+)
+    .replace(/#\d+/g, '')                           // reference numbers
+    .replace(/TRANSACTION#?:?\s*\d*/gi, '')
+    .replace(/\*+/g, ' ')                           // asterisks to space
+    .replace(/[^\w\s&'-]/g, ' ')                    // remove most punctuation
+    .replace(/\s+/g, ' ')                           // collapse whitespace
+    .trim();
+  
+  // Take first 3 meaningful words (vendor core name)
+  const words = cleaned.split(' ').filter(w => w.length > 1).slice(0, 3);
+  return words.join(' ') || cleaned || description.toUpperCase();
+}
+
+/**
+ * Detect recurring transactions based on:
+ * 1. Same normalized vendor appearing 2+ times
+ * 2. Cadence analysis: monthly (~25-35 days), biweekly (~12-16 days), weekly (~6-8 days)
+ * 3. Similar amounts (within 20% or $15, whichever is greater)
+ */
 export function detectRecurring(transactions: Transaction[]): Map<string, boolean> {
   const recurringMap = new Map<string, boolean>();
   
-  // Group transactions by vendor
+  // Group transactions by normalized vendor
   const vendorTransactions = new Map<string, Transaction[]>();
   transactions.forEach(tx => {
-    const vendor = extractVendorName(tx.description);
+    // Only consider expenses
+    if (tx.amount >= 0) {
+      recurringMap.set(tx.id, false);
+      return;
+    }
+    
+    const vendor = normalizeVendor(tx.description);
     const existing = vendorTransactions.get(vendor) || [];
     existing.push(tx);
     vendorTransactions.set(vendor, existing);
   });
   
-  // For each transaction, check if it has a recurring pattern
-  transactions.forEach(tx => {
-    const vendor = extractVendorName(tx.description);
-    const vendorTxs = vendorTransactions.get(vendor) || [];
-    
-    // Need at least 3 transactions from same vendor
-    if (vendorTxs.length < 3) {
-      recurringMap.set(tx.id, false);
+  // Analyze each vendor's transactions for recurring patterns
+  vendorTransactions.forEach((txs, vendor) => {
+    // Need at least 2 transactions
+    if (txs.length < 2) {
+      txs.forEach(tx => recurringMap.set(tx.id, false));
       return;
     }
     
-    const txDate = new Date(tx.date);
-    const txDay = txDate.getDate();
-    const txMonth = `${txDate.getFullYear()}-${txDate.getMonth()}`;
-    const txAmount = Math.abs(tx.amount);
+    // Sort by date
+    const sorted = [...txs].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
     
-    // Find all transactions with similar day (±5) and amount (±$10)
-    const matchingTxs = vendorTxs.filter(otherTx => {
-      const otherDate = new Date(otherTx.date);
-      const otherDay = otherDate.getDate();
-      const otherAmount = Math.abs(otherTx.amount);
-      
-      // Check day of month is within ±5 days (handle month wraparound)
-      const dayDiff = Math.min(
-        Math.abs(txDay - otherDay),
-        Math.abs(txDay - otherDay + 31),
-        Math.abs(txDay - otherDay - 31)
+    // Calculate intervals between consecutive transactions
+    const intervals: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const daysDiff = Math.round(
+        (new Date(sorted[i].date).getTime() - new Date(sorted[i-1].date).getTime()) 
+        / (1000 * 60 * 60 * 24)
       );
-      const isSimilarDay = dayDiff <= 5;
-      
-      // Check amount is within ±$10
-      const amountDiff = Math.abs(txAmount - otherAmount);
-      const isSimilarAmount = amountDiff <= 10;
-      
-      return isSimilarDay && isSimilarAmount;
-    });
-    
-    // Require 3+ matches across at least 2 different calendar months
-    if (matchingTxs.length >= 3) {
-      const uniqueMonths = new Set(matchingTxs.map(t => {
-        const d = new Date(t.date);
-        return `${d.getFullYear()}-${d.getMonth()}`;
-      }));
-      
-      if (uniqueMonths.size >= 2) {
-        recurringMap.set(tx.id, true);
-        return;
-      }
+      intervals.push(daysDiff);
     }
     
-    recurringMap.set(tx.id, false);
+    // Check if amounts are similar (within 20% or $15)
+    const amounts = txs.map(t => Math.abs(t.amount));
+    const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    const tolerance = Math.max(avgAmount * 0.2, 15);
+    const amountsSimilar = amounts.every(a => Math.abs(a - avgAmount) <= tolerance);
+    
+    if (!amountsSimilar) {
+      txs.forEach(tx => recurringMap.set(tx.id, false));
+      return;
+    }
+    
+    // Check cadence patterns
+    const isRecurring = checkCadencePattern(intervals);
+    
+    txs.forEach(tx => recurringMap.set(tx.id, isRecurring));
   });
   
   return recurringMap;
 }
 
-// Exported so UI components can group transactions consistently.
-export function extractVendorName(description: string): string {
-  // Clean up common patterns and extract core vendor name
-  const cleaned = description
-    .replace(/\d{2}\/\d{2}/g, '') // Remove dates
-    .replace(/\d{6,}/g, '') // Remove long numbers
-    .replace(/transaction#:\s*\d+/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+/**
+ * Check if intervals match common recurring patterns:
+ * - Monthly: median interval 25-35 days
+ * - Biweekly: median interval 12-16 days
+ * - Weekly: median interval 6-8 days
+ * - Annual: interval ~350-380 days
+ */
+function checkCadencePattern(intervals: number[]): boolean {
+  if (intervals.length === 0) return false;
   
-  // Take first meaningful words
-  const words = cleaned.split(' ').slice(0, 3).join(' ').toLowerCase();
-  return words || description.toLowerCase();
+  // Calculate median interval
+  const sorted = [...intervals].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 !== 0 
+    ? sorted[mid] 
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+  
+  // Check against known patterns
+  const patterns = [
+    { name: 'weekly', min: 5, max: 9 },
+    { name: 'biweekly', min: 12, max: 16 },
+    { name: 'monthly', min: 25, max: 35 },
+    { name: 'bimonthly', min: 55, max: 65 },
+    { name: 'quarterly', min: 85, max: 100 },
+    { name: 'annual', min: 350, max: 380 },
+  ];
+  
+  for (const pattern of patterns) {
+    if (median >= pattern.min && median <= pattern.max) {
+      return true;
+    }
+  }
+  
+  // Also check if most intervals are within 20% of median (flexible recurring)
+  const withinTolerance = intervals.filter(i => 
+    Math.abs(i - median) <= median * 0.25
+  );
+  
+  return withinTolerance.length >= intervals.length * 0.7;
+}
+
+// Exported so UI components can group transactions consistently.
+// Now uses the improved normalizeVendor function.
+export function extractVendorName(description: string): string {
+  return normalizeVendor(description);
 }
 
 // Calculate pay periods
