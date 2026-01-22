@@ -8,6 +8,7 @@ import { BalanceSettings } from '@/components/BalanceSettings';
 import { RecurringSummary } from '@/components/RecurringSummary';
 import { PayPeriodInfo } from '@/components/PayPeriodInfo';
 import { UpcomingBillsBeforePayday } from '@/components/UpcomingBillsBeforePayday';
+import { ExpectedCommission, PendingCommission } from '@/components/ExpectedCommission';
 import { Transaction, FinanceSettings } from '@/types/finance';
 import { 
   parseCSV, 
@@ -23,6 +24,7 @@ const Index = () => {
     lowBalanceThreshold: 500,
     selectedMonth: null,
   });
+  const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>([]);
 
   // Process transactions whenever raw data or settings change
   const transactions = useMemo<Transaction[]>(() => {
@@ -77,6 +79,22 @@ const Index = () => {
       setSettings(s => ({ ...s, startingBalance: inferredStart }));
     }
   };
+
+  const handleAddCommission = (commission: Omit<PendingCommission, 'id'>) => {
+    setPendingCommissions(prev => [...prev, {
+      ...commission,
+      id: `commission-${Date.now()}`,
+    }]);
+  };
+
+  const handleRemoveCommission = (id: string) => {
+    setPendingCommissions(prev => prev.filter(c => c.id !== id));
+  };
+
+  // Get next expected commission
+  const nextCommission = pendingCommissions
+    .filter(c => c.expectedDate >= new Date())
+    .sort((a, b) => a.expectedDate.getTime() - b.expectedDate.getTime())[0] || null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -140,10 +158,16 @@ const Index = () => {
               {/* Sidebar */}
               <div className="space-y-6">
                 <CSVUploader onUpload={handleCSVUpload} hasData={true} />
+                <ExpectedCommission 
+                  commissions={pendingCommissions}
+                  onAdd={handleAddCommission}
+                  onRemove={handleRemoveCommission}
+                />
                 <UpcomingBillsBeforePayday 
                   transactions={filteredTransactions}
                   currentBalance={currentBalance}
                   selectedMonth={settings.selectedMonth}
+                  nextCommission={nextCommission}
                 />
                 <PayPeriodInfo selectedMonth={settings.selectedMonth} />
                 <RecurringSummary transactions={filteredTransactions} />

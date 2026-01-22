@@ -1,12 +1,14 @@
-import { AlertTriangle, Calendar, DollarSign, Clock } from 'lucide-react';
+import { AlertTriangle, Calendar, DollarSign, Clock, TrendingUp } from 'lucide-react';
 import { Transaction, PayPeriod } from '@/types/finance';
 import { formatCurrency, getPayPeriods } from '@/utils/financeUtils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { PendingCommission } from './ExpectedCommission';
 
 interface UpcomingBillsBeforePaydayProps {
   transactions: Transaction[];
   currentBalance: number;
   selectedMonth: string | null;
+  nextCommission: PendingCommission | null;
 }
 
 interface RecurringBill {
@@ -19,7 +21,8 @@ interface RecurringBill {
 export function UpcomingBillsBeforePayday({ 
   transactions, 
   currentBalance,
-  selectedMonth 
+  selectedMonth,
+  nextCommission,
 }: UpcomingBillsBeforePaydayProps) {
   const today = new Date();
   const year = selectedMonth 
@@ -129,14 +132,27 @@ export function UpcomingBillsBeforePayday({
         <h3 className="font-semibold">Bills Before Next Payday</h3>
       </div>
 
+      {/* Next Payday Info */}
       {nextPayPeriod && (
         <div className="mb-4 pb-4 border-b border-border">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-            Next Commission Arrives
+            {nextCommission ? 'Expected Commission' : 'Next Commission Arrives'}
           </p>
-          <p className="text-lg font-semibold text-income">
-            {formatPayDate(nextPayPeriod.paymentDate)}
-          </p>
+          {nextCommission ? (
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-income" />
+              <p className="text-lg font-semibold text-income">
+                {formatCurrency(nextCommission.amount)}
+              </p>
+              <span className="text-sm text-muted-foreground">
+                on {formatPayDate(nextCommission.expectedDate)}
+              </span>
+            </div>
+          ) : (
+            <p className="text-lg font-semibold text-income">
+              {formatPayDate(nextPayPeriod.paymentDate)}
+            </p>
+          )}
         </div>
       )}
 
@@ -170,6 +186,21 @@ export function UpcomingBillsBeforePayday({
               You need <span className="text-expense font-semibold">{formatCurrency(shortfall)}</span> more to cover bills before payday
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Projected Balance After Commission */}
+      {nextCommission && (
+        <div className="p-3 rounded-lg bg-muted/50 border border-border mb-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+            Projected Balance After Payday
+          </p>
+          <p className="text-xl font-bold font-mono text-income">
+            {formatCurrency(currentBalance - totalNeeded + nextCommission.amount)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Current ({formatCurrency(currentBalance)}) − Bills ({formatCurrency(totalNeeded)}) + Commission
+          </p>
         </div>
       )}
 

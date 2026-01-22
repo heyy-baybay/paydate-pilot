@@ -56,3 +56,10 @@ export interface FinanceSettings {
   lowBalanceThreshold: number;
   selectedMonth: string | null;
 }
+
+export interface PendingCommission {
+  id: string;
+  amount: number;
+  expectedDate: Date;
+  cutoffDate: string;
+}
