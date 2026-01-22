@@ -121,8 +121,10 @@ export function BillsBeforePayday({
   };
 
   const handleAddCommission = () => {
+    console.log('[BillsBeforePayday] handleAddCommission called', { commissionAmount, commissionDate, hasCallback: !!onAddCommission });
     const amount = parseFloat(commissionAmount);
     if (!isNaN(amount) && amount > 0 && commissionDate && onAddCommission) {
+      console.log('[BillsBeforePayday] Adding commission', { amount, date: commissionDate });
       onAddCommission({
         amount,
         expectedDate: new Date(commissionDate),
@@ -131,6 +133,8 @@ export function BillsBeforePayday({
       setCommissionAmount('');
       setCommissionDate('');
       setShowCommissionForm(false);
+    } else {
+      console.log('[BillsBeforePayday] Validation failed', { amount, isNaN: isNaN(amount), commissionDate, hasCallback: !!onAddCommission });
     }
   };
 
@@ -232,7 +236,7 @@ export function BillsBeforePayday({
 
                     {/* Commission Entry Form */}
                     {showCommissionForm && !nextCommission && onAddCommission && (
-                      <div className="space-y-3 mb-4 pb-4 border-b border-income/20">
+                      <div className="space-y-3 mb-4 pb-4 border-b border-income/20" onClick={(e) => e.stopPropagation()}>
                         <div className="space-y-1">
                           <Label className="text-xs">Amount</Label>
                           <div className="relative">
@@ -242,7 +246,11 @@ export function BillsBeforePayday({
                               step="0.01"
                               placeholder="15987.04"
                               value={commissionAmount}
-                              onChange={(e) => setCommissionAmount(e.target.value)}
+                              onChange={(e) => {
+                                console.log('[Form] Amount changed:', e.target.value);
+                                setCommissionAmount(e.target.value);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
                               className="h-8 pl-7 text-sm"
                             />
                           </div>
@@ -252,23 +260,35 @@ export function BillsBeforePayday({
                           <Input
                             type="date"
                             value={commissionDate}
-                            onChange={(e) => setCommissionDate(e.target.value)}
+                            onChange={(e) => {
+                              console.log('[Form] Date changed:', e.target.value);
+                              setCommissionDate(e.target.value);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
                             className="h-8 text-sm"
                           />
                         </div>
                         <div className="flex gap-2">
                           <Button
+                            type="button"
                             size="sm"
                             className="h-7 text-xs flex-1"
-                            onClick={handleAddCommission}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleAddCommission();
+                            }}
                           >
                             Save
                           </Button>
                           <Button
+                            type="button"
                             variant="outline"
                             size="sm"
                             className="h-7 text-xs"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
                               setShowCommissionForm(false);
                               setCommissionAmount('');
                               setCommissionDate('');
