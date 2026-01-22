@@ -3,7 +3,7 @@ import { Upload, FileSpreadsheet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface CSVUploaderProps {
-  onUpload: (content: string, merge?: boolean) => void;
+  onUpload: (content: string) => void;
   hasData: boolean;
 }
 
@@ -11,9 +11,8 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingMergeRef = useRef(false);
 
-  const handleFile = useCallback((file: File, merge = false) => {
+  const handleFile = useCallback((file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
       alert('Please upload a CSV file');
       return;
@@ -23,7 +22,7 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
     reader.onload = (e) => {
       const content = e.target?.result as string;
       setFileName(file.name);
-      onUpload(content, merge);
+      onUpload(content);
     };
     reader.readAsText(file);
   }, [onUpload]);
@@ -49,14 +48,13 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
     setIsDragging(false);
   }, []);
 
-  const handleClick = useCallback((merge = false) => {
-    pendingMergeRef.current = merge;
+  const handleClick = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file, pendingMergeRef.current);
+    if (file) handleFile(file);
     // Reset input so same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -81,15 +79,10 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleClick(false)}>
-            Replace
-          </Button>
-          <Button variant="default" size="sm" className="flex-1" onClick={() => handleClick(true)}>
-            <Upload className="w-4 h-4 mr-1" />
-            Merge
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" className="w-full" onClick={handleClick}>
+          <Upload className="w-4 h-4 mr-1" />
+          Replace Data
+        </Button>
         <input
           ref={fileInputRef}
           type="file"
@@ -107,7 +100,7 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onClick={() => handleClick(false)}
+      onClick={handleClick}
     >
       <input
         ref={fileInputRef}
@@ -127,7 +120,7 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
           </p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Supports Chase bank CSV format
+          Supports Chase bank and QuickBooks CSV formats
         </p>
       </div>
     </div>

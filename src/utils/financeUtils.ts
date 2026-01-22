@@ -54,23 +54,54 @@ const categoryPatterns: Record<TransactionCategory, RegExp[]> = {
 };
 
 export function categorizeTransaction(description: string, type: string, amount: number, qbCategory?: string): TransactionCategory {
-  // If we have a QuickBooks category, use it directly
+  // If we have a QuickBooks category (Account full name), map to simplified category
   if (qbCategory) {
     const qbLower = qbCategory.toLowerCase();
-    if (qbLower.includes('gas') || qbLower.includes('fuel')) return 'Gas';
-    if (qbLower.includes('travel')) return 'Travel';
-    if (qbLower.includes('legal') || qbLower.includes('accounting')) return 'Legal & Accounting';
-    if (qbLower.includes('office supplies')) return 'Office Supplies';
-    if (qbLower.includes('software')) return 'Software';
-    if (qbLower.includes('repair') || qbLower.includes('maintenance')) return 'Repairs & Maintenance';
-    if (qbLower.includes('postage') || qbLower.includes('shipping')) return 'Postage';
-    if (qbLower.includes('tax') || qbLower.includes('registration')) return 'Taxes & Registration';
-    if (qbLower.includes('insurance')) return 'Insurance';
-    if (qbLower.includes('subscription')) return 'Subscriptions';
-    if (qbLower.includes('sales') || qbLower.includes('income') || qbLower.includes('revenue')) return 'Sales';
-    if (qbLower.includes('owner\'s contribution') || qbLower.includes('capital')) return "Owner's Contribution";
-    if (qbLower.includes('owner\'s distribution') || qbLower.includes('draw')) return "Owner's Distribution";
-    if (qbLower.includes('due from') || qbLower.includes('transfer')) return 'Transfers';
+    
+    // Gas / Fuel
+    if (qbLower.includes('gas') || qbLower.includes('fuel') || qbLower.includes('diesel')) return 'Gas';
+    
+    // Travel
+    if (qbLower.includes('travel') || qbLower.includes('lodging') || qbLower.includes('hotel') || qbLower.includes('meals')) return 'Travel';
+    
+    // Legal & Accounting
+    if (qbLower.includes('legal') || qbLower.includes('accounting') || qbLower.includes('professional') || qbLower.includes('attorney')) return 'Legal & Accounting';
+    
+    // Office Supplies
+    if (qbLower.includes('office') || qbLower.includes('supplies') || qbLower.includes('equipment')) return 'Office Supplies';
+    
+    // Software / Technology
+    if (qbLower.includes('software') || qbLower.includes('computer') || qbLower.includes('technology') || qbLower.includes('internet')) return 'Software';
+    
+    // Repairs & Maintenance
+    if (qbLower.includes('repair') || qbLower.includes('maintenance') || qbLower.includes('truck') || qbLower.includes('vehicle')) return 'Repairs & Maintenance';
+    
+    // Postage / Shipping
+    if (qbLower.includes('postage') || qbLower.includes('shipping') || qbLower.includes('freight') || qbLower.includes('delivery')) return 'Postage';
+    
+    // Taxes & Registration
+    if (qbLower.includes('tax') || qbLower.includes('license') || qbLower.includes('registration') || qbLower.includes('permit')) return 'Taxes & Registration';
+    
+    // Insurance
+    if (qbLower.includes('insurance') || qbLower.includes('liability') || qbLower.includes('cargo')) return 'Insurance';
+    
+    // Subscriptions
+    if (qbLower.includes('subscription') || qbLower.includes('dues') || qbLower.includes('membership')) return 'Subscriptions';
+    
+    // Sales / Income
+    if (qbLower.includes('sales') || qbLower.includes('income') || qbLower.includes('revenue') || qbLower.includes('accounts receivable')) return 'Sales';
+    
+    // Owner's Contribution
+    if (qbLower.includes('owner\'s contribution') || qbLower.includes('capital contribution') || qbLower.includes('owner contribution')) return "Owner's Contribution";
+    
+    // Owner's Distribution / Draw
+    if (qbLower.includes('owner\'s distribution') || qbLower.includes('draw') || qbLower.includes('distribution') || qbLower.includes('shareholder')) return "Owner's Distribution";
+    
+    // Transfers
+    if (qbLower.includes('transfer') || qbLower.includes('due from') || qbLower.includes('due to') || qbLower.includes('checking') || qbLower.includes('savings')) return 'Transfers';
+    
+    // Bank Fees
+    if (qbLower.includes('fee') || qbLower.includes('bank charge') || qbLower.includes('service charge')) return 'Fees';
   }
   
   const cleanDesc = description.toLowerCase();
@@ -102,9 +133,10 @@ export function categorizeTransaction(description: string, type: string, amount:
 }
 
 // Detect recurring transactions based on:
-// 1. Same vendor appearing multiple times
-// 2. Similar day of month (±3 days)
-// 3. Similar amount (±$10)
+// 1. Same vendor appearing 3+ times
+// 2. Across at least 2 different calendar months
+// 3. Similar day of month (±5 days)
+// 4. Similar amount (±$10)
 export function detectRecurring(transactions: Transaction[]): Map<string, boolean> {
   const recurringMap = new Map<string, boolean>();
   
@@ -122,31 +154,30 @@ export function detectRecurring(transactions: Transaction[]): Map<string, boolea
     const vendor = extractVendorName(tx.description);
     const vendorTxs = vendorTransactions.get(vendor) || [];
     
-    // Need at least 2 transactions from same vendor
-    if (vendorTxs.length < 2) {
+    // Need at least 3 transactions from same vendor
+    if (vendorTxs.length < 3) {
       recurringMap.set(tx.id, false);
       return;
     }
     
     const txDate = new Date(tx.date);
     const txDay = txDate.getDate();
+    const txMonth = `${txDate.getFullYear()}-${txDate.getMonth()}`;
     const txAmount = Math.abs(tx.amount);
     
-    // Check if there's another transaction with similar day and amount
-    const hasRecurringPattern = vendorTxs.some(otherTx => {
-      if (otherTx.id === tx.id) return false;
-      
+    // Find all transactions with similar day (±5) and amount (±$10)
+    const matchingTxs = vendorTxs.filter(otherTx => {
       const otherDate = new Date(otherTx.date);
       const otherDay = otherDate.getDate();
       const otherAmount = Math.abs(otherTx.amount);
       
-      // Check day of month is within ±3 days (handle month wraparound)
+      // Check day of month is within ±5 days (handle month wraparound)
       const dayDiff = Math.min(
         Math.abs(txDay - otherDay),
         Math.abs(txDay - otherDay + 31),
         Math.abs(txDay - otherDay - 31)
       );
-      const isSimilarDay = dayDiff <= 3;
+      const isSimilarDay = dayDiff <= 5;
       
       // Check amount is within ±$10
       const amountDiff = Math.abs(txAmount - otherAmount);
@@ -155,7 +186,20 @@ export function detectRecurring(transactions: Transaction[]): Map<string, boolea
       return isSimilarDay && isSimilarAmount;
     });
     
-    recurringMap.set(tx.id, hasRecurringPattern);
+    // Require 3+ matches across at least 2 different calendar months
+    if (matchingTxs.length >= 3) {
+      const uniqueMonths = new Set(matchingTxs.map(t => {
+        const d = new Date(t.date);
+        return `${d.getFullYear()}-${d.getMonth()}`;
+      }));
+      
+      if (uniqueMonths.size >= 2) {
+        recurringMap.set(tx.id, true);
+        return;
+      }
+    }
+    
+    recurringMap.set(tx.id, false);
   });
   
   return recurringMap;
