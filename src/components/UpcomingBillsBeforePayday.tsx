@@ -50,6 +50,7 @@ interface RecurringBill {
   lastSeen: string;
   category: TransactionCategory;
   transactionId: string;
+  transactionIds: string[]; // All transaction IDs for this vendor
   history: TransactionHistory[];
 }
 
@@ -123,11 +124,13 @@ export function UpcomingBillsBeforePayday({
         lastSeen: tx.date,
         category: tx.category,
         transactionId: tx.id,
+        transactionIds: [tx.id],
         history: [historyEntry],
       });
     } else {
-      // Add to history
+      // Add to history and transaction IDs
       existing.history.push(historyEntry);
+      existing.transactionIds.push(tx.id);
       // Update to most recent if newer
       if (new Date(tx.date) > new Date(existing.lastSeen)) {
         existing.amount = Math.abs(tx.amount);
@@ -188,6 +191,13 @@ export function UpcomingBillsBeforePayday({
 
   const handleRecurringToggle = (transactionId: string, isRecurring: boolean) => {
     onUpdateTransaction?.(transactionId, { isRecurring });
+  };
+
+  // Mark all transactions for a vendor as not recurring
+  const handleRemoveBill = (bill: RecurringBill) => {
+    bill.transactionIds.forEach(txId => {
+      onUpdateTransaction?.(txId, { isRecurring: false });
+    });
   };
 
   const getCategoryColor = (category: string) => {
@@ -534,7 +544,7 @@ export function UpcomingBillsBeforePayday({
                             variant="ghost"
                             size="sm"
                             className="h-6 w-6 p-0 text-muted-foreground hover:text-expense hover:bg-expense/10"
-                            onClick={() => handleRecurringToggle(bill.transactionId, false)}
+                            onClick={() => handleRemoveBill(bill)}
                             title="Remove from recurring bills"
                           >
                             <X className="w-3 h-3" />
