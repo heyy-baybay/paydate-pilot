@@ -151,9 +151,26 @@ const Index = () => {
     addBill,
     updateBill,
     removeBill,
+    clearAllBills,
     addFromSuggestion,
     dismissSuggestion,
   } = useBills(transactionsWithOverrides);
+
+  // Clear all bills and recurring overrides
+  const handleClearAllBillsAndRecurring = () => {
+    clearAllBills();
+    // Also clear all recurring overrides
+    setTransactionOverrides(prev => {
+      const newOverrides: typeof prev = {};
+      Object.entries(prev).forEach(([id, override]) => {
+        // Keep category overrides, remove recurring
+        if (override.category) {
+          newOverrides[id] = { category: override.category };
+        }
+      });
+      return newOverrides;
+    });
+  };
 
   const handleCSVUpload = (content: string) => {
     console.log('[CSVUpload] Replacing data');
@@ -287,6 +304,7 @@ const Index = () => {
                   onRemoveBill={removeBill}
                   onAddFromSuggestion={addFromSuggestion}
                   onDismissSuggestion={dismissSuggestion}
+                  onClearAll={handleClearAllBillsAndRecurring}
                 />
                 <BillsBeforePayday
                   bills={bills}

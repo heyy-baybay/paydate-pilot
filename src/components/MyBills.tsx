@@ -21,6 +21,7 @@ interface MyBillsProps {
   onRemoveBill: (id: string) => void;
   onAddFromSuggestion: (suggestion: SuggestedVendor) => void;
   onDismissSuggestion: (vendor: string) => void;
+  onClearAll?: () => void;
 }
 
 function getOrdinal(n: number): string {
@@ -37,6 +38,7 @@ export function MyBills({
   onRemoveBill,
   onAddFromSuggestion,
   onDismissSuggestion,
+  onClearAll,
 }: MyBillsProps) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [showBills, setShowBills] = useState(true);
@@ -67,9 +69,25 @@ export function MyBills({
     <div className="stat-card border-2 border-primary/20">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">My Bills</h3>
-        <Badge variant="secondary" className="font-mono">
-          {activeBills.length} active
-        </Badge>
+        <div className="flex items-center gap-2">
+          {activeBills.length > 0 && onClearAll && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs text-muted-foreground hover:text-expense"
+              onClick={() => {
+                onClearAll();
+                toast.success('Cleared all bills');
+              }}
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              Clear All
+            </Button>
+          )}
+          <Badge variant="secondary" className="font-mono">
+            {activeBills.length} active
+          </Badge>
+        </div>
       </div>
 
       {/* Suggestions Section */}

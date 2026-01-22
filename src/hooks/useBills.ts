@@ -150,6 +150,10 @@ export function useBills(transactions: Transaction[]) {
     setBills(prev => prev.filter(b => b.id !== id));
   };
 
+  const clearAllBills = () => {
+    setBills([]);
+  };
+
   const addFromSuggestion = (suggestion: SuggestedVendor) => {
     addBill({
       vendor: suggestion.vendor,
@@ -166,6 +170,7 @@ export function useBills(transactions: Transaction[]) {
     addBill,
     updateBill,
     removeBill,
+    clearAllBills,
     addFromSuggestion,
     dismissSuggestion,
     restoreAllSuggestions,
