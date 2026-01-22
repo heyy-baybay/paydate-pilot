@@ -179,11 +179,103 @@ export function determinePayPeriodImpact(dateStr: string): boolean {
   return false;
 }
 
-// Parse CSV content
+// Detect CSV format type
+function detectCSVFormat(lines: string[]): 'bank' | 'quickbooks' {
+  // QuickBooks has metadata rows and specific header pattern
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const line = lines[i].toLowerCase();
+    if (line.includes('transaction type') && line.includes('account name')) {
+      return 'quickbooks';
+    }
+  }
+  return 'bank';
+}
+
+// Parse amount from QuickBooks format (handles quoted values with commas)
+function parseQuickBooksAmount(amountStr: string): number {
+  if (!amountStr) return 0;
+  // Remove quotes and commas, then parse
+  const cleaned = amountStr.replace(/"/g, '').replace(/,/g, '').trim();
+  return parseFloat(cleaned) || 0;
+}
+
+// Parse CSV content (auto-detects format)
 export function parseCSV(content: string): RawTransaction[] {
   const lines = content.trim().split('\n');
   if (lines.length < 2) return [];
   
+  const format = detectCSVFormat(lines);
+  
+  if (format === 'quickbooks') {
+    return parseQuickBooksCSV(lines);
+  }
+  
+  return parseBankCSV(lines);
+}
+
+// Parse QuickBooks Transaction List by Date format
+function parseQuickBooksCSV(lines: string[]): RawTransaction[] {
+  const transactions: RawTransaction[] = [];
+  
+  // Find the header row (contains "Date,Transaction type,...")
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const line = lines[i].toLowerCase();
+    if (line.startsWith('date,') && line.includes('transaction type')) {
+      headerIndex = i;
+      break;
+    }
+  }
+  
+  if (headerIndex === -1) return [];
+  
+  // Process data rows after header
+  for (let i = headerIndex + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    
+    const fields = parseCSVLine(line);
+    if (fields.length < 9) continue;
+    
+    // QuickBooks columns: Date, Transaction type, Num, Posting (Y/N), Name, Memo/Description, Account name, Account full name, Amount
+    const date = fields[0];
+    const transactionType = fields[1];
+    const name = fields[4];
+    const description = fields[5];
+    const accountName = fields[6];
+    const accountFullName = fields[7];
+    const amount = parseQuickBooksAmount(fields[8]);
+    
+    // Skip rows without amount or date
+    if (!date || amount === 0) continue;
+    
+    // Create description from available info
+    const fullDescription = description || name || transactionType;
+    
+    // Determine type based on transaction type and amount
+    let type = transactionType;
+    if (amount > 0) {
+      type = transactionType.toLowerCase().includes('deposit') ? 'ACH_CREDIT' : 'CREDIT';
+    } else {
+      type = 'DEBIT';
+    }
+    
+    transactions.push({
+      details: transactionType,
+      postingDate: date,
+      description: fullDescription.replace(/^"|"$/g, ''),
+      amount: amount,
+      type: type,
+      balance: 0, // QuickBooks doesn't provide running balance
+      checkOrSlip: undefined,
+    });
+  }
+  
+  return transactions;
+}
+
+// Parse bank CSV format (original format)
+function parseBankCSV(lines: string[]): RawTransaction[] {
   const transactions: RawTransaction[] = [];
   
   // Skip header row
@@ -191,7 +283,6 @@ export function parseCSV(content: string): RawTransaction[] {
     const line = lines[i];
     if (!line.trim()) continue;
     
-    // Parse CSV with quoted fields
     const fields = parseCSVLine(line);
     if (fields.length < 6) continue;
     
