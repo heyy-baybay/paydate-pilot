@@ -143,8 +143,9 @@ export function useBills(transactions: Transaction[]) {
 
       if (!isExpense) return;
 
-      const vendorKey = safeKey(tx.description);
-      const vendorLabel = normalizeVendor(tx.description); // normalized but display-friendly
+      // Use extracted vendor name (handles ACH strings like "ORIG CO NAME:Sana Benefits ...").
+      const vendorLabel = extractVendorName(tx.description) || normalizeVendor(tx.description);
+      const vendorKey = safeKey(vendorLabel);
 
       // Skip if already in My Bills
       if (existingVendorKeys.has(vendorKey)) return;

@@ -296,7 +296,36 @@ function checkCadencePattern(intervals: number[]): boolean {
 // Exported so UI components can group transactions consistently.
 // Now uses the improved normalizeVendor function.
 export function extractVendorName(description: string): string {
-  return normalizeVendor(description);
+  const raw = (description || '').trim();
+  if (!raw) return '';
+
+  // ACH-style details often contain explicit fields we can reliably parse.
+  // Example:
+  // "ORIG CO NAME:Sana Benefits ORIG ID:... DESC DATE:... ACH DEBIT ..."
+  const text = raw;
+  const candidates: string[] = [];
+
+  const tryBetween = (start: RegExp, end: RegExp) => {
+    const startMatch = start.exec(text);
+    if (!startMatch || startMatch.index == null) return;
+    const afterStart = text.slice(startMatch.index + startMatch[0].length);
+    const endMatch = end.exec(afterStart);
+    const picked = (endMatch ? afterStart.slice(0, endMatch.index) : afterStart).trim();
+    if (picked) candidates.push(picked);
+  };
+
+  // Most common ACH formats
+  tryBetween(/ORIG\s+CO\s+NAME\s*:/i, /\s+ORIG\s+ID\s*:/i);
+  tryBetween(/ORIGINATOR\s+NAME\s*:/i, /\s+(ORIGINATOR\s+ID|ORIG\s+ID)\s*:/i);
+  tryBetween(/COMPANY\s+NAME\s*:/i, /\s+(COMPANY\s+ID|ORIG\s+ID)\s*:/i);
+
+  // Fallback: some exports include an IND/INDIVIDUAL name and a company name; prefer company.
+  // If we can’t parse a field cleanly, we’ll just normalize the full description.
+  const best = candidates
+    .map((c) => c.replace(/\s+/g, ' ').trim())
+    .find((c) => c.length >= 2);
+
+  return normalizeVendor(best || text);
 }
 
 // Calculate pay periods
