@@ -97,7 +97,7 @@ export function MyBills({
                 {suggestedVendors.map((suggestion) => (
                   <div
                     key={suggestion.vendor}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border cursor-pointer select-none"
+                    className="flex flex-col items-stretch justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border cursor-pointer select-none sm:flex-row sm:items-center"
                     role="button"
                     tabIndex={0}
                     onClick={() => {
@@ -120,12 +120,12 @@ export function MyBills({
                         ~{formatCurrency(suggestion.avgAmount)} • {suggestion.occurrences}x seen • ~{getOrdinal(suggestion.suggestedDueDay)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0 sm:justify-end">
                       <Button
                         type="button"
                         size="sm"
                         variant="secondary"
-                        className="h-7 px-2"
+                        className="h-8 px-3 w-full sm:w-auto"
                         onClick={(e) => {
                           e.stopPropagation();
                           onAddFromSuggestion(suggestion);
@@ -139,7 +139,7 @@ export function MyBills({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                        className="h-8 px-3 w-full sm:w-auto text-muted-foreground hover:text-foreground"
                         onClick={(e) => {
                           e.stopPropagation();
                           onDismissSuggestion(suggestion.vendor);
