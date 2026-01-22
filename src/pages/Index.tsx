@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Wallet } from 'lucide-react';
 import { CSVUploader } from '@/components/CSVUploader';
 import { TransactionTable } from '@/components/TransactionTable';
@@ -17,15 +17,78 @@ import {
   generateMonthSummary 
 } from '@/utils/financeUtils';
 
+const STORAGE_KEYS = {
+  RAW_DATA: 'cashflow_raw_data',
+  SETTINGS: 'cashflow_settings',
+  COMMISSIONS: 'cashflow_commissions',
+  OVERRIDES: 'cashflow_overrides',
+};
+
+// Helper to safely parse stored commissions (dates need to be converted back)
+const parseStoredCommissions = (stored: string | null): PendingCommission[] => {
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    return parsed.map((c: any) => ({
+      ...c,
+      expectedDate: new Date(c.expectedDate),
+      cutoffDate: new Date(c.cutoffDate),
+    }));
+  } catch {
+    return [];
+  }
+};
+
 const Index = () => {
-  const [rawData, setRawData] = useState<string | null>(null);
-  const [settings, setSettings] = useState<FinanceSettings>({
-    startingBalance: 0,
-    lowBalanceThreshold: 500,
-    selectedMonth: null,
+  const [rawData, setRawData] = useState<string | null>(() => {
+    return localStorage.getItem(STORAGE_KEYS.RAW_DATA);
   });
-  const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>([]);
-  const [transactionOverrides, setTransactionOverrides] = useState<Record<string, Partial<Pick<Transaction, 'category' | 'isRecurring'>>>>({});
+  const [settings, setSettings] = useState<FinanceSettings>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return { startingBalance: 0, lowBalanceThreshold: 500, selectedMonth: null };
+      }
+    }
+    return { startingBalance: 0, lowBalanceThreshold: 500, selectedMonth: null };
+  });
+  const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>(() => {
+    return parseStoredCommissions(localStorage.getItem(STORAGE_KEYS.COMMISSIONS));
+  });
+  const [transactionOverrides, setTransactionOverrides] = useState<Record<string, Partial<Pick<Transaction, 'category' | 'isRecurring'>>>>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.OVERRIDES);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
+
+  // Persist data to localStorage whenever it changes
+  useEffect(() => {
+    if (rawData) {
+      localStorage.setItem(STORAGE_KEYS.RAW_DATA, rawData);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.RAW_DATA);
+    }
+  }, [rawData]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.COMMISSIONS, JSON.stringify(pendingCommissions));
+  }, [pendingCommissions]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.OVERRIDES, JSON.stringify(transactionOverrides));
+  }, [transactionOverrides]);
 
   // Process transactions whenever raw data or settings change
   const transactions = useMemo<Transaction[]>(() => {
