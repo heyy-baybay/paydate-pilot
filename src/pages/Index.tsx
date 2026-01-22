@@ -167,6 +167,7 @@ const Index = () => {
     bills,
     suggestedVendors,
     addBill,
+    addBillFromTransaction,
     updateBill,
     removeBill,
     addFromSuggestion,
@@ -199,6 +200,14 @@ const Index = () => {
   };
 
   const handleUpdateTransaction = (id: string, updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>) => {
+    // If user is turning on recurring for an expense, also create a bill entry.
+    if (updates.isRecurring === true) {
+      const tx = transactionsWithOverrides.find(t => t.id === id);
+      if (tx && !tx.isRecurring) {
+        addBillFromTransaction(tx);
+      }
+    }
+
     setTransactionOverrides(prev => ({
       ...prev,
       [id]: { ...prev[id], ...updates }

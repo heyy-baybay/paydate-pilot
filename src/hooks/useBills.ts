@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Bill, SuggestedVendor } from '@/types/bills';
 import { Transaction } from '@/types/finance';
-import { normalizeVendor } from '@/utils/financeUtils';
+import { extractVendorName, normalizeVendor } from '@/utils/financeUtils';
 
 const STORAGE_KEY = 'cashflow_my_bills';
 const DISMISSED_KEY = 'cashflow_dismissed_bill_suggestions';
@@ -35,6 +35,13 @@ function safeSet(key: string, value: string) {
 
 function safeKey(vendorLike: string): string {
   return normalizeVendor(vendorLike).trim().toLowerCase();
+}
+
+function isExpenseTx(tx: Transaction): boolean {
+  return (
+    tx.amount < 0 ||
+    (tx.amount > 0 && (tx.type || '').toLowerCase().includes('debit'))
+  );
 }
 
 export function useBills(transactions: Transaction[]) {
@@ -209,12 +216,39 @@ export function useBills(transactions: Transaction[]) {
   }, [transactions, bills, dismissedSuggestions, ignoredVendors]);
 
   const addBill = (bill: Omit<Bill, 'id'>) => {
-    console.log('[useBills] addBill called with:', bill);
-    setBills(prev => {
-      const newBill = { ...bill, id: `bill-${Date.now()}` };
-      const updated = [...prev, newBill];
-      console.log('[useBills] Bills state updated. Count:', updated.length, 'New bill:', newBill);
-      return updated;
+    setBills(prev => [...prev, { ...bill, id: `bill-${Date.now()}` }]);
+  };
+
+  /**
+   * Add a bill directly from a transaction (used by the TransactionTable recurring toggle flow).
+   * - Uses extractVendorName() to handle ACH-style descriptions like:
+   *   "ORIG CO NAME:Sana Benefits ... IND NAME:Tuckey Trucking ..."
+   * - De-dupes by vendor key so repeated toggles don't create duplicates.
+   */
+  const addBillFromTransaction = (tx: Transaction) => {
+    if (!isExpenseTx(tx)) return;
+
+    const vendor = (extractVendorName(tx.description) || normalizeVendor(tx.description)).trim();
+    if (!vendor) return;
+
+    const amount = Math.round(Math.abs(tx.amount) * 100) / 100;
+    const dueDay = new Date(tx.date).getDate();
+    const vendorKey = safeKey(vendor);
+
+    setBills((prev) => {
+      const exists = prev.some((b) => safeKey(b.vendor) === vendorKey && b.active);
+      if (exists) return prev;
+      return [
+        ...prev,
+        {
+          id: `bill-${Date.now()}`,
+          vendor,
+          amount,
+          dueDay,
+          category: tx.category,
+          active: true,
+        },
+      ];
     });
   };
 
@@ -234,7 +268,6 @@ export function useBills(transactions: Transaction[]) {
   };
 
   const addFromSuggestion = (suggestion: SuggestedVendor) => {
-    console.log('[useBills] addFromSuggestion called with:', suggestion);
     const newBill = {
       vendor: suggestion.vendor,
       amount: suggestion.avgAmount,
@@ -242,7 +275,6 @@ export function useBills(transactions: Transaction[]) {
       category: suggestion.category,
       active: true,
     };
-    console.log('[useBills] Creating bill:', newBill);
     addBill(newBill);
   };
 
@@ -250,6 +282,7 @@ export function useBills(transactions: Transaction[]) {
     bills,
     suggestedVendors,
     addBill,
+    addBillFromTransaction,
     updateBill,
     removeBill,
     addFromSuggestion,
