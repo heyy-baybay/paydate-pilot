@@ -25,6 +25,7 @@ const Index = () => {
     selectedMonth: null,
   });
   const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>([]);
+  const [transactionOverrides, setTransactionOverrides] = useState<Record<string, Partial<Pick<Transaction, 'category' | 'isRecurring'>>>>({});
 
   // Process transactions whenever raw data or settings change
   const transactions = useMemo<Transaction[]>(() => {
@@ -33,16 +34,24 @@ const Index = () => {
     return processTransactions(parsed, settings.startingBalance);
   }, [rawData, settings.startingBalance]);
 
+  // Apply overrides to transactions
+  const transactionsWithOverrides = useMemo(() => {
+    return transactions.map(tx => ({
+      ...tx,
+      ...transactionOverrides[tx.id]
+    }));
+  }, [transactions, transactionOverrides]);
+
   // Get unique months for filter
   const uniqueMonths = useMemo(() => {
     return getUniqueMonths(transactions);
   }, [transactions]);
 
-  // Filter transactions by selected month
+  // Filter transactions by selected month (use overrides)
   const filteredTransactions = useMemo(() => {
-    if (!settings.selectedMonth) return transactions;
+    if (!settings.selectedMonth) return transactionsWithOverrides;
     
-    return transactions.filter(tx => {
+    return transactionsWithOverrides.filter(tx => {
       const [year, month] = settings.selectedMonth!.split('-');
       const txDate = new Date(tx.date);
       return (
@@ -50,12 +59,12 @@ const Index = () => {
         txDate.getMonth() + 1 === parseInt(month)
       );
     });
-  }, [transactions, settings.selectedMonth]);
+  }, [transactionsWithOverrides, settings.selectedMonth]);
 
-  // Generate summary for selected month
+  // Generate summary for selected month (use overrides)
   const monthSummaries = useMemo(() => {
-    return generateMonthSummary(transactions);
-  }, [transactions]);
+    return generateMonthSummary(transactionsWithOverrides);
+  }, [transactionsWithOverrides]);
 
   const currentSummary = useMemo(() => {
     if (!settings.selectedMonth) {
@@ -89,6 +98,13 @@ const Index = () => {
 
   const handleRemoveCommission = (id: string) => {
     setPendingCommissions(prev => prev.filter(c => c.id !== id));
+  };
+
+  const handleUpdateTransaction = (id: string, updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>) => {
+    setTransactionOverrides(prev => ({
+      ...prev,
+      [id]: { ...prev[id], ...updates }
+    }));
   };
 
   // Get next expected commission
@@ -168,6 +184,7 @@ const Index = () => {
                   currentBalance={currentBalance}
                   selectedMonth={settings.selectedMonth}
                   nextCommission={nextCommission}
+                  onUpdateTransaction={handleUpdateTransaction}
                 />
                 <PayPeriodInfo selectedMonth={settings.selectedMonth} />
                 <RecurringSummary transactions={filteredTransactions} />
