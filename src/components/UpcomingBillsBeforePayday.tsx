@@ -70,6 +70,7 @@ export function UpcomingBillsBeforePayday({
 }: UpcomingBillsBeforePaydayProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingBill, setEditingBill] = useState<string | null>(null);
+  const [expandedBills, setExpandedBills] = useState<Set<string>>(new Set());
 
   const today = new Date();
   // Normalize to day-level comparisons so bills due "today" don't get pushed to next month
@@ -623,99 +624,186 @@ export function UpcomingBillsBeforePayday({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ScrollArea className="max-h-[300px] pr-2 mt-2">
+            <ScrollArea className="max-h-[400px] pr-2 mt-2">
               <div className="space-y-2">
-                {billsBeforePayday.map((bill) => (
-                  <div 
-                    key={bill.id} 
-                    className="p-3 rounded-lg bg-muted/50 border border-border"
-                  >
-                    {/* Bill Header */}
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm font-medium truncate" title={bill.vendor}>
-                          {bill.vendor}
-                        </span>
+                {billsBeforePayday.map((bill) => {
+                  const isBillExpanded = expandedBills.has(bill.id);
+                  const expectedDate = (() => {
+                    // Calculate expected date for display
+                    const todayLocal = new Date();
+                    const createClampedDate = (year: number, month: number, day: number) => {
+                      const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+                      return new Date(year, month, Math.min(day, lastDayOfMonth));
+                    };
+                    let expected = createClampedDate(todayLocal.getFullYear(), todayLocal.getMonth(), bill.expectedDate);
+                    if (expected < todayLocal) {
+                      expected = createClampedDate(todayLocal.getFullYear(), todayLocal.getMonth() + 1, bill.expectedDate);
+                    }
+                    return expected;
+                  })();
+                  
+                  return (
+                    <div 
+                      key={bill.id} 
+                      className="rounded-lg bg-muted/50 border border-border overflow-hidden"
+                    >
+                      {/* Clickable Bill Header */}
+                      <div 
+                        className="p-3 cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => {
+                          setExpandedBills(prev => {
+                            const next = new Set(prev);
+                            if (next.has(bill.id)) {
+                              next.delete(bill.id);
+                            } else {
+                              next.add(bill.id);
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="text-sm font-medium truncate" title={bill.vendor}>
+                              {bill.vendor}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm font-semibold text-expense">
+                              {formatCurrency(bill.amount)}
+                            </span>
+                            {isBillExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>Due {expectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} ({getOrdinal(bill.expectedDate)} of month)</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-sm font-semibold text-expense">
-                          {formatCurrency(bill.amount)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => setEditingBill(editingBill === bill.id ? null : bill.id)}
-                          title="Edit bill"
-                        >
-                          {editingBill === bill.id ? (
-                            <ChevronUp className="w-3 h-3" />
-                          ) : (
-                            <Edit2 className="w-3 h-3" />
+
+                      {/* Expanded Details */}
+                      {isBillExpanded && (
+                        <div className="px-3 pb-3 border-t border-border bg-background/50">
+                          {/* Quick Stats */}
+                          <div className="grid grid-cols-3 gap-2 py-3">
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground">Occurrences</p>
+                              <p className="text-sm font-semibold">{bill.history.length}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground">Avg Amount</p>
+                              <p className="text-sm font-semibold font-mono">
+                                {formatCurrency(bill.history.reduce((sum, h) => sum + h.amount, 0) / bill.history.length)}
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground">Category</p>
+                              <Badge variant="secondary" className={`${getCategoryColor(bill.category)} text-xs px-1.5 py-0`}>
+                                {bill.category}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {/* Transaction History */}
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                              Recent Transactions
+                            </p>
+                            {bill.history.slice(0, 5).map((entry, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-xs p-2 rounded bg-muted/30">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-muted-foreground truncate" title={entry.description}>
+                                    {new Date(entry.date).toLocaleDateString('en-US', { 
+                                      month: 'short', 
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                </div>
+                                <span className="font-mono text-expense font-medium ml-2">
+                                  {formatCurrency(entry.amount)}
+                                </span>
+                              </div>
+                            ))}
+                            {bill.history.length > 5 && (
+                              <p className="text-xs text-muted-foreground text-center py-1">
+                                +{bill.history.length - 5} more
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs flex-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingBill(editingBill === bill.id ? null : bill.id);
+                              }}
+                            >
+                              <Edit2 className="w-3 h-3 mr-1" />
+                              Edit
+                            </Button>
+                            {onUpdateTransaction && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs text-expense hover:text-expense hover:bg-expense/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveBill(bill);
+                                }}
+                              >
+                                <X className="w-3 h-3 mr-1" />
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Edit Controls */}
+                          {editingBill === bill.id && onUpdateTransaction && (
+                            <div className="mt-3 pt-3 border-t border-border space-y-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Category</Label>
+                                <Select 
+                                  value={bill.category} 
+                                  onValueChange={(value) => handleCategoryChange(bill.transactionId, value as TransactionCategory)}
+                                >
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {CATEGORIES.map((cat) => (
+                                      <SelectItem key={cat} value={cat} className="text-xs">
+                                        {cat}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs flex items-center gap-1">
+                                  <RefreshCw className="w-3 h-3" />
+                                  Recurring
+                                </Label>
+                                <Switch
+                                  checked={true}
+                                  onCheckedChange={(checked) => handleRecurringToggle(bill.transactionId, checked)}
+                                />
+                              </div>
+                            </div>
                           )}
-                        </Button>
-                        {onUpdateTransaction && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 text-muted-foreground hover:text-expense hover:bg-expense/10"
-                            onClick={() => handleRemoveBill(bill)}
-                            title="Remove from recurring bills"
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Bill Details */}
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>~{getOrdinal(bill.expectedDate)} of month</span>
-                      <span>•</span>
-                      <Badge variant="secondary" className={`${getCategoryColor(bill.category)} text-xs px-1.5 py-0`}>
-                        {bill.category}
-                      </Badge>
-                    </div>
-
-                    {/* Edit Controls */}
-                    {editingBill === bill.id && onUpdateTransaction && (
-                      <div className="mt-3 pt-3 border-t border-border space-y-3">
-                        {/* Category Select */}
-                        <div className="space-y-1">
-                          <Label className="text-xs">Category</Label>
-                          <Select 
-                            value={bill.category} 
-                            onValueChange={(value) => handleCategoryChange(bill.transactionId, value as TransactionCategory)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {CATEGORIES.map((cat) => (
-                                <SelectItem key={cat} value={cat} className="text-xs">
-                                  {cat}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
                         </div>
-
-                        {/* Recurring Toggle */}
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs flex items-center gap-1">
-                            <RefreshCw className="w-3 h-3" />
-                            Recurring
-                          </Label>
-                          <Switch
-                            checked={true}
-                            onCheckedChange={(checked) => handleRecurringToggle(bill.transactionId, checked)}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </ScrollArea>
           </CollapsibleContent>
