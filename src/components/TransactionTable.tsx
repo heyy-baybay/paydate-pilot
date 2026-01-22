@@ -16,12 +16,13 @@ import {
 interface TransactionTableProps {
   transactions: Transaction[];
   lowBalanceThreshold: number;
+  onUpdateTransaction?: (id: string, updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>) => void;
 }
 
 type SortField = 'date' | 'amount' | 'category';
 type SortOrder = 'asc' | 'desc';
 
-export function TransactionTable({ transactions, lowBalanceThreshold }: TransactionTableProps) {
+export function TransactionTable({ transactions, lowBalanceThreshold, onUpdateTransaction }: TransactionTableProps) {
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
@@ -161,13 +162,17 @@ export function TransactionTable({ transactions, lowBalanceThreshold }: Transact
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
-                      {tx.isRecurring ? (
-                        <div className="flex items-center justify-center">
+                      <button
+                        onClick={() => onUpdateTransaction?.(tx.id, { isRecurring: !tx.isRecurring })}
+                        className="p-1 rounded hover:bg-muted transition-colors cursor-pointer"
+                        title={tx.isRecurring ? "Click to mark as not recurring" : "Click to mark as recurring"}
+                      >
+                        {tx.isRecurring ? (
                           <RefreshCw className="w-4 h-4 text-recurring" />
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className={getCategoryColor(tx.category)}>

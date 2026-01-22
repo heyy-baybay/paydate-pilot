@@ -261,6 +261,7 @@ const Index = () => {
                 <TransactionTable 
                   transactions={filteredTransactions}
                   lowBalanceThreshold={settings.lowBalanceThreshold}
+                  onUpdateTransaction={handleUpdateTransaction}
                 />
               </div>
 
