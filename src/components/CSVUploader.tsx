@@ -10,8 +10,8 @@ interface CSVUploaderProps {
 export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [pendingMerge, setPendingMerge] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingMergeRef = useRef(false);
 
   const handleFile = useCallback((file: File, merge = false) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
@@ -24,7 +24,6 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
       const content = e.target?.result as string;
       setFileName(file.name);
       onUpload(content, merge);
-      setPendingMerge(false);
     };
     reader.readAsText(file);
   }, [onUpload]);
@@ -51,18 +50,18 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
   }, []);
 
   const handleClick = useCallback((merge = false) => {
-    setPendingMerge(merge);
+    pendingMergeRef.current = merge;
     fileInputRef.current?.click();
   }, []);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file, pendingMerge);
+    if (file) handleFile(file, pendingMergeRef.current);
     // Reset input so same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [handleFile, pendingMerge]);
+  }, [handleFile]);
 
   const handleClear = useCallback(() => {
     setFileName(null);
