@@ -139,7 +139,12 @@ export function useBills(transactions: Transaction[]) {
   }, [transactions, bills, dismissedSuggestions]);
 
   const addBill = (bill: Omit<Bill, 'id'>) => {
-    setBills(prev => [...prev, { ...bill, id: `bill-${Date.now()}` }]);
+    console.log('[useBills] Adding bill:', bill);
+    setBills(prev => {
+      const newBills = [...prev, { ...bill, id: `bill-${Date.now()}` }];
+      console.log('[useBills] Bills after add:', newBills);
+      return newBills;
+    });
   };
 
   const updateBill = (id: string, updates: Partial<Bill>) => {
