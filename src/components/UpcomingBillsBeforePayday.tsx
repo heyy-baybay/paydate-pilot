@@ -99,7 +99,14 @@ export function UpcomingBillsBeforePayday({
   }
 
   // Get all recurring expenses (both auto-detected and manually marked)
-  const recurringExpenses = transactions.filter(tx => tx.isRecurring && tx.amount < 0);
+  // Some CSV exports represent expenses as positive numbers but label them as DEBIT.
+  // For the purposes of "Bills Before Next Payday", treat (Recurring + DEBIT) as an expense.
+  const recurringExpenses = transactions.filter((tx) => {
+    if (!tx.isRecurring) return false;
+    if (tx.amount < 0) return true;
+    const typeLower = (tx.type || '').toLowerCase();
+    return tx.amount > 0 && typeLower.includes('debit');
+  });
   
   // 60-day recency cutoff - only consider bills seen within last 60 days
   const sixtyDaysAgo = new Date();
@@ -217,6 +224,8 @@ export function UpcomingBillsBeforePayday({
   });
 
   const recurringExpenseCount = recurringExpenses.length;
+  const recurringFlaggedTotal = transactions.filter((tx) => tx.isRecurring).length;
+  const recurringFlaggedButNonExpense = recurringFlaggedTotal - recurringExpenseCount;
   const vendorCount = vendorBills.size;
   const recentVendorCount = recentVendorBills.size;
 
@@ -467,6 +476,11 @@ export function UpcomingBillsBeforePayday({
               <> • Next payday not found</>
             )}
           </p>
+          {recurringFlaggedButNonExpense > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Note: <span className="font-mono">{recurringFlaggedButNonExpense}</span> recurring item(s) look like non-expenses (e.g. income/credits), so they won’t be counted as bills.
+            </p>
+          )}
           {recurringExpenseCount === 0 && (
             <p className="text-xs text-muted-foreground mt-2">
               Tip: mark a transaction as “Recurring” in the table (or ensure your CSV includes enough history) so it can be predicted here.
