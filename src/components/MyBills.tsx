@@ -97,20 +97,7 @@ export function MyBills({
                 {suggestedVendors.map((suggestion) => (
                   <div
                     key={suggestion.vendor}
-                    className="flex flex-col items-stretch justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border cursor-pointer select-none sm:flex-row sm:items-center"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      onAddFromSuggestion(suggestion);
-                      toast.success('Added to My Bills', { description: suggestion.vendor });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onAddFromSuggestion(suggestion);
-                        toast.success('Added to My Bills', { description: suggestion.vendor });
-                      }
-                    }}
+                    className="flex flex-col items-stretch justify-between gap-2 p-2 rounded-lg bg-muted/50 border border-border md:flex-row md:items-center"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate" title={suggestion.vendor}>
@@ -120,7 +107,7 @@ export function MyBills({
                         ~{formatCurrency(suggestion.avgAmount)} • {suggestion.occurrences}x seen • ~{getOrdinal(suggestion.suggestedDueDay)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 sm:justify-end">
+                    <div className="flex flex-col gap-2 flex-shrink-0 sm:flex-row sm:items-center sm:justify-end">
                       <Button
                         type="button"
                         size="sm"
