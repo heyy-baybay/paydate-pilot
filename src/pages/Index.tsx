@@ -245,7 +245,7 @@ const Index = () => {
                   onRemove={handleRemoveCommission}
                 />
                 <UpcomingBillsBeforePayday 
-                  transactions={filteredTransactions}
+                  transactions={transactionsWithOverrides}
                   currentBalance={currentBalance}
                   selectedMonth={settings.selectedMonth}
                   nextCommission={nextCommission}

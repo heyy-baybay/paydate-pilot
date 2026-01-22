@@ -64,7 +64,7 @@ const CATEGORIES: TransactionCategory[] = [
 export function UpcomingBillsBeforePayday({ 
   transactions, 
   currentBalance,
-  selectedMonth,
+  selectedMonth: _selectedMonth,
   nextCommission,
   onUpdateTransaction,
 }: UpcomingBillsBeforePaydayProps) {
@@ -72,33 +72,27 @@ export function UpcomingBillsBeforePayday({
   const [editingBill, setEditingBill] = useState<string | null>(null);
 
   const today = new Date();
-  const year = selectedMonth 
-    ? parseInt(selectedMonth.split('-')[0]) 
-    : today.getFullYear();
-  const month = selectedMonth 
-    ? parseInt(selectedMonth.split('-')[1]) - 1 
-    : today.getMonth();
-
-  const periods = getPayPeriods(year, month);
+  // Bills-before-payday is a forward-looking view, so payday calculations should
+  // always be anchored to *today* (not the month filter used for the table).
+  const periods = getPayPeriods(today.getFullYear(), today.getMonth());
   
   const currentDay = today.getDate();
   let nextPayPeriod: PayPeriod | null = null;
-  let nextCutoff: Date | null = null;
   
   for (let i = 0; i < periods.length; i++) {
     if (periods[i].paymentDate > today) {
       nextPayPeriod = periods[i];
-      nextCutoff = periods[i].cutoffDate;
       break;
     }
   }
   
   if (!nextPayPeriod) {
-    const nextMonth = month === 11 ? 0 : month + 1;
-    const nextYear = month === 11 ? year + 1 : year;
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+    const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
     const nextPeriods = getPayPeriods(nextYear, nextMonth);
     nextPayPeriod = nextPeriods[0];
-    nextCutoff = nextPeriods[0]?.cutoffDate || null;
   }
 
   // Get all recurring expenses (both auto-detected and manually marked)
@@ -168,10 +162,6 @@ export function UpcomingBillsBeforePayday({
   const nextPayDate = nextPayPeriod?.paymentDate;
   
   if (nextPayDate) {
-    const nextPayDay = nextPayDate.getDate();
-    const nextPayMonth = nextPayDate.getMonth();
-    const nextPayYear = nextPayDate.getFullYear();
-    
     recentVendorBills.forEach(bill => {
       // Calculate when this bill would next occur based on expected date
       let expectedBillDate = new Date(today.getFullYear(), today.getMonth(), bill.expectedDate);
