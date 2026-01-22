@@ -37,40 +37,52 @@ export function SummaryCards({ summary, currentBalance }: SummaryCardsProps) {
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {stats.map((stat) => (
-        <div key={stat.label} className="stat-card animate-fade-in">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {stat.label}
-              </p>
-              <p className={`text-2xl font-bold mt-1 font-mono ${
-                stat.trend === 'positive' ? 'text-income' : 
-                stat.trend === 'negative' ? 'text-expense' : 
-                'text-foreground'
+      {stats.map((stat) => {
+        const isNegativeBalance = stat.label === 'Current Balance' && currentBalance < 0;
+        
+        return (
+          <div 
+            key={stat.label} 
+            className={`stat-card animate-fade-in ${
+              isNegativeBalance ? 'border-expense bg-expense/5' : ''
+            }`}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {stat.label}
+                </p>
+                <p className={`text-2xl font-bold mt-1 font-mono ${
+                  isNegativeBalance ? 'text-expense' :
+                  stat.trend === 'positive' ? 'text-income' : 
+                  stat.trend === 'negative' ? 'text-expense' : 
+                  'text-foreground'
+                }`}>
+                  {stat.value}
+                </p>
+              </div>
+              <div className={`p-2 rounded-lg ${
+                isNegativeBalance ? 'bg-expense/10' :
+                stat.trend === 'positive' ? 'bg-income/10' : 
+                stat.trend === 'negative' ? 'bg-expense/10' : 
+                'bg-muted'
               }`}>
-                {stat.value}
+                <stat.icon className={`w-5 h-5 ${
+                  isNegativeBalance ? 'text-expense' :
+                  stat.trend === 'positive' ? 'text-income' : 
+                  stat.trend === 'negative' ? 'text-expense' : 
+                  'text-muted-foreground'
+                }`} />
+              </div>
+            </div>
+            {summary && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {summary.transactionCount} transactions in {summary.month}
               </p>
-            </div>
-            <div className={`p-2 rounded-lg ${
-              stat.trend === 'positive' ? 'bg-income/10' : 
-              stat.trend === 'negative' ? 'bg-expense/10' : 
-              'bg-muted'
-            }`}>
-              <stat.icon className={`w-5 h-5 ${
-                stat.trend === 'positive' ? 'text-income' : 
-                stat.trend === 'negative' ? 'text-expense' : 
-                'text-muted-foreground'
-              }`} />
-            </div>
+            )}
           </div>
-          {summary && (
-            <p className="text-xs text-muted-foreground mt-2">
-              {summary.transactionCount} transactions in {summary.month}
-            </p>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

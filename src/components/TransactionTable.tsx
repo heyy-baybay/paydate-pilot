@@ -132,16 +132,13 @@ export function TransactionTable({ transactions, lowBalanceThreshold }: Transact
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedTransactions.map((tx, index) => {
-                const isLowBalance = tx.runningBalance < lowBalanceThreshold;
-                
+            {sortedTransactions.map((tx, index) => {
                 return (
                   <TableRow 
                     key={tx.id}
                     className={`
                       transition-colors
                       ${tx.isRecurring ? 'row-recurring' : ''}
-                      ${isLowBalance ? 'row-low-balance' : ''}
                     `}
                     style={{ animationDelay: `${index * 20}ms` }}
                   >
@@ -184,9 +181,7 @@ export function TransactionTable({ transactions, lowBalanceThreshold }: Transact
                         <X className="w-4 h-4 text-muted-foreground/50 mx-auto" />
                       )}
                     </TableCell>
-                    <TableCell className={`text-right font-mono ${
-                      isLowBalance ? 'text-expense font-semibold' : ''
-                    }`}>
+                    <TableCell className="text-right font-mono">
                       {formatCurrency(tx.runningBalance)}
                     </TableCell>
                   </TableRow>
