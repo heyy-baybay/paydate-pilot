@@ -205,7 +205,8 @@ export function detectRecurring(transactions: Transaction[]): Map<string, boolea
   return recurringMap;
 }
 
-function extractVendorName(description: string): string {
+// Exported so UI components can group transactions consistently.
+export function extractVendorName(description: string): string {
   // Clean up common patterns and extract core vendor name
   const cleaned = description
     .replace(/\d{2}\/\d{2}/g, '') // Remove dates
