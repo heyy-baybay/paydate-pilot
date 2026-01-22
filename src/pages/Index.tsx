@@ -9,14 +9,15 @@ import { RecurringSummary } from '@/components/RecurringSummary';
 import { PayPeriodInfo } from '@/components/PayPeriodInfo';
 import { MyBills } from '@/components/MyBills';
 import { BillsBeforePayday } from '@/components/BillsBeforePayday';
-import { ExpectedCommission, PendingCommission } from '@/components/ExpectedCommission';
+import { ExpectedCommission } from '@/components/ExpectedCommission';
 import { useBills } from '@/hooks/useBills';
-import { Transaction, FinanceSettings } from '@/types/finance';
-import { 
-  parseCSV, 
-  processTransactions, 
+import { Transaction, FinanceSettings, PendingCommission } from '@/types/finance';
+import { lsGet, lsSet, lsRemove, lsGetParsed, lsSetJson } from '@/hooks/useStorage';
+import {
+  parseCSV,
+  processTransactions,
   getUniqueMonths,
-  generateMonthSummary 
+  generateMonthSummary,
 } from '@/utils/financeUtils';
 
 const STORAGE_KEYS = {
@@ -24,73 +25,49 @@ const STORAGE_KEYS = {
   SETTINGS: 'cashflow_settings',
   COMMISSIONS: 'cashflow_commissions',
   OVERRIDES: 'cashflow_overrides',
-};
+} as const;
 
-
-const canUseStorage = (): boolean => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
-
-const lsGet = (key: string): string | null => {
-  if (!canUseStorage()) return null;
-  try { return window.localStorage.getItem(key); } catch { return null; }
-};
-
-const lsSet = (key: string, value: string) => {
-  if (!canUseStorage()) return;
-  try { window.localStorage.setItem(key, value); } catch { /* ignore */ }
-};
-
-const lsRemove = (key: string) => {
-  if (!canUseStorage()) return;
-  try { window.localStorage.removeItem(key); } catch { /* ignore */ }
-};
-
-
-// Helper to safely parse stored commissions (dates need to be converted back)
-const parseStoredCommissions = (stored: string | null): PendingCommission[] => {
+/**
+ * Parse stored commissions, converting date strings back to Date objects.
+ */
+function parseStoredCommissions(stored: string | null): PendingCommission[] {
   if (!stored) return [];
   try {
     const parsed = JSON.parse(stored);
-    return parsed.map((c: any) => ({
+    return parsed.map((c: Record<string, unknown>) => ({
       ...c,
-      expectedDate: new Date(c.expectedDate),
-      cutoffDate: new Date(c.cutoffDate),
+      expectedDate: new Date(c.expectedDate as string),
+      cutoffDate: c.cutoffDate,
     }));
   } catch {
     return [];
   }
-};
+}
 
 const Index = () => {
-  const [rawData, setRawData] = useState<string | null>(() => {
-    return lsGet(STORAGE_KEYS.RAW_DATA);
-  });
-  const [settings, setSettings] = useState<FinanceSettings>(() => {
-    const stored = lsGet(STORAGE_KEYS.SETTINGS);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return { startingBalance: 0, lowBalanceThreshold: 500, selectedMonth: null };
-      }
-    }
-    return { startingBalance: 0, lowBalanceThreshold: 500, selectedMonth: null };
-  });
-  const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>(() => {
-    return parseStoredCommissions(lsGet(STORAGE_KEYS.COMMISSIONS));
-  });
-  const [transactionOverrides, setTransactionOverrides] = useState<Record<string, Partial<Pick<Transaction, 'category' | 'isRecurring'>>>>(() => {
-    const stored = lsGet(STORAGE_KEYS.OVERRIDES);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return {};
-      }
-    }
-    return {};
-  });
+  // Raw CSV data
+  const [rawData, setRawData] = useState<string | null>(() => lsGet(STORAGE_KEYS.RAW_DATA));
 
-  // Persist data to localStorage whenever it changes
+  // Finance settings
+  const [settings, setSettings] = useState<FinanceSettings>(() =>
+    lsGetParsed(STORAGE_KEYS.SETTINGS, {
+      startingBalance: 0,
+      lowBalanceThreshold: 500,
+      selectedMonth: null,
+    })
+  );
+
+  // Pending commissions
+  const [pendingCommissions, setPendingCommissions] = useState<PendingCommission[]>(() =>
+    parseStoredCommissions(lsGet(STORAGE_KEYS.COMMISSIONS))
+  );
+
+  // Transaction overrides (category, isRecurring)
+  const [transactionOverrides, setTransactionOverrides] = useState<
+    Record<string, Partial<Pick<Transaction, 'category' | 'isRecurring'>>>
+  >(() => lsGetParsed(STORAGE_KEYS.OVERRIDES, {}));
+
+  // Persist to localStorage
   useEffect(() => {
     if (rawData) {
       lsSet(STORAGE_KEYS.RAW_DATA, rawData);
@@ -100,55 +77,53 @@ const Index = () => {
   }, [rawData]);
 
   useEffect(() => {
-    lsSet(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    lsSetJson(STORAGE_KEYS.SETTINGS, settings);
   }, [settings]);
 
   useEffect(() => {
-    lsSet(STORAGE_KEYS.COMMISSIONS, JSON.stringify(pendingCommissions));
+    lsSetJson(STORAGE_KEYS.COMMISSIONS, pendingCommissions);
   }, [pendingCommissions]);
 
   useEffect(() => {
-    lsSet(STORAGE_KEYS.OVERRIDES, JSON.stringify(transactionOverrides));
+    lsSetJson(STORAGE_KEYS.OVERRIDES, transactionOverrides);
   }, [transactionOverrides]);
 
-  // Process transactions whenever raw data or settings change
+  // Process transactions
   const transactions = useMemo<Transaction[]>(() => {
     if (!rawData) return [];
     const parsed = parseCSV(rawData);
     return processTransactions(parsed, settings.startingBalance);
   }, [rawData, settings.startingBalance]);
 
-  // Apply overrides to transactions
-  const transactionsWithOverrides = useMemo(() => {
-    return transactions.map(tx => ({
-      ...tx,
-      ...transactionOverrides[tx.id]
-    }));
-  }, [transactions, transactionOverrides]);
+  // Apply overrides
+  const transactionsWithOverrides = useMemo(
+    () =>
+      transactions.map((tx) => ({
+        ...tx,
+        ...transactionOverrides[tx.id],
+      })),
+    [transactions, transactionOverrides]
+  );
 
-  // Get unique months for filter
-  const uniqueMonths = useMemo(() => {
-    return getUniqueMonths(transactions);
-  }, [transactions]);
+  // Unique months for filter
+  const uniqueMonths = useMemo(() => getUniqueMonths(transactions), [transactions]);
 
-  // Filter transactions by selected month (use overrides)
+  // Filtered transactions
   const filteredTransactions = useMemo(() => {
     if (!settings.selectedMonth) return transactionsWithOverrides;
-    
-    return transactionsWithOverrides.filter(tx => {
-      const [year, month] = settings.selectedMonth!.split('-');
+
+    const [year, month] = settings.selectedMonth.split('-');
+    return transactionsWithOverrides.filter((tx) => {
       const txDate = new Date(tx.date);
-      return (
-        txDate.getFullYear() === parseInt(year) &&
-        txDate.getMonth() + 1 === parseInt(month)
-      );
+      return txDate.getFullYear() === parseInt(year) && txDate.getMonth() + 1 === parseInt(month);
     });
   }, [transactionsWithOverrides, settings.selectedMonth]);
 
-  // Generate summary for selected month (use overrides)
-  const monthSummaries = useMemo(() => {
-    return generateMonthSummary(transactionsWithOverrides);
-  }, [transactionsWithOverrides]);
+  // Month summaries
+  const monthSummaries = useMemo(
+    () => generateMonthSummary(transactionsWithOverrides),
+    [transactionsWithOverrides]
+  );
 
   const currentSummary = useMemo(() => {
     if (!settings.selectedMonth) {
@@ -156,13 +131,13 @@ const Index = () => {
     }
     const [year, month] = settings.selectedMonth.split('-').map(Number);
     const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
-    return monthSummaries.find(s => s.month === monthName && s.year === year) || null;
+    return monthSummaries.find((s) => s.month === monthName && s.year === year) || null;
   }, [monthSummaries, settings.selectedMonth]);
 
-  // Get current balance (most recent transaction)
+  // Current balance
   const currentBalance = transactions[0]?.runningBalance || settings.startingBalance;
 
-  // Bills hook - uses transactionsWithOverrides for suggestions
+  // Bills hook
   const {
     bills,
     suggestedVendors,
@@ -176,49 +151,53 @@ const Index = () => {
     restoreAllIgnoredVendors,
   } = useBills(transactionsWithOverrides);
 
+  // Handlers
   const handleCSVUpload = (content: string) => {
-    console.log('[CSVUpload] Replacing data');
     setRawData(content);
-    // Auto-detect starting balance from oldest transaction
     const parsed = parseCSV(content);
     if (parsed.length > 0) {
       const oldest = parsed[parsed.length - 1];
       const inferredStart = oldest.balance - oldest.amount;
-      setSettings(s => ({ ...s, startingBalance: inferredStart }));
+      setSettings((s) => ({ ...s, startingBalance: inferredStart }));
     }
   };
 
   const handleAddCommission = (commission: Omit<PendingCommission, 'id'>) => {
-    setPendingCommissions(prev => [...prev, {
-      ...commission,
-      id: `commission-${Date.now()}`,
-    }]);
+    setPendingCommissions((prev) => [
+      ...prev,
+      { ...commission, id: `commission-${Date.now()}` },
+    ]);
   };
 
   const handleRemoveCommission = (id: string) => {
-    setPendingCommissions(prev => prev.filter(c => c.id !== id));
+    setPendingCommissions((prev) => prev.filter((c) => c.id !== id));
   };
 
-  const handleUpdateTransaction = (id: string, updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>) => {
-    // If user is turning on recurring for an expense, also create a bill entry.
+  const handleUpdateTransaction = (
+    id: string,
+    updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>
+  ) => {
+    // If marking as recurring, also create a bill entry
     if (updates.isRecurring === true) {
-      const tx = transactionsWithOverrides.find(t => t.id === id);
+      const tx = transactionsWithOverrides.find((t) => t.id === id);
       if (tx && !tx.isRecurring) {
         addBillFromTransaction(tx);
       }
     }
 
-    setTransactionOverrides(prev => ({
+    setTransactionOverrides((prev) => ({
       ...prev,
-      [id]: { ...prev[id], ...updates }
+      [id]: { ...prev[id], ...updates },
     }));
   };
 
-  // Get next expected commission (coerce dates from localStorage strings)
+  // Next commission
   const now = new Date();
-  const nextCommission = pendingCommissions
-    .filter(c => new Date(c.expectedDate) >= now)
-    .sort((a, b) => new Date(a.expectedDate).getTime() - new Date(b.expectedDate).getTime())[0] || null;
+  const nextCommission =
+    pendingCommissions
+      .filter((c) => new Date(c.expectedDate) >= now)
+      .sort((a, b) => new Date(a.expectedDate).getTime() - new Date(b.expectedDate).getTime())[0] ||
+    null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -235,19 +214,23 @@ const Index = () => {
                 <p className="text-xs text-muted-foreground">Commission Pay Period Manager</p>
               </div>
             </div>
-            
+
             {transactions.length > 0 && (
               <div className="flex items-center gap-3">
                 <MonthFilter
                   months={uniqueMonths}
                   selectedMonth={settings.selectedMonth}
-                  onMonthChange={(month) => setSettings(s => ({ ...s, selectedMonth: month }))}
+                  onMonthChange={(month) => setSettings((s) => ({ ...s, selectedMonth: month }))}
                 />
                 <BalanceSettings
                   startingBalance={settings.startingBalance}
                   lowBalanceThreshold={settings.lowBalanceThreshold}
-                  onStartingBalanceChange={(val) => setSettings(s => ({ ...s, startingBalance: val }))}
-                  onThresholdChange={(val) => setSettings(s => ({ ...s, lowBalanceThreshold: val }))}
+                  onStartingBalanceChange={(val) =>
+                    setSettings((s) => ({ ...s, startingBalance: val }))
+                  }
+                  onThresholdChange={(val) =>
+                    setSettings((s) => ({ ...s, lowBalanceThreshold: val }))
+                  }
                 />
               </div>
             )}
@@ -256,24 +239,18 @@ const Index = () => {
       </header>
 
       <main className="container py-6 space-y-6">
-        {/* Upload Section */}
         {transactions.length === 0 ? (
           <div className="max-w-xl mx-auto py-12 animate-fade-in">
             <CSVUploader onUpload={handleCSVUpload} hasData={false} />
           </div>
         ) : (
           <>
-            {/* Summary Cards */}
-            <SummaryCards 
-              summary={currentSummary} 
-              currentBalance={currentBalance}
-            />
+            <SummaryCards summary={currentSummary} currentBalance={currentBalance} />
 
-            {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
               {/* Transaction Table */}
               <div className="lg:col-span-3">
-                <TransactionTable 
+                <TransactionTable
                   transactions={filteredTransactions}
                   lowBalanceThreshold={settings.lowBalanceThreshold}
                   onUpdateTransaction={handleUpdateTransaction}
@@ -281,9 +258,9 @@ const Index = () => {
               </div>
 
               {/* Sidebar */}
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <CSVUploader onUpload={handleCSVUpload} hasData={true} />
-                <ExpectedCommission 
+                <ExpectedCommission
                   commissions={pendingCommissions}
                   onAdd={handleAddCommission}
                   onRemove={handleRemoveCommission}
@@ -296,7 +273,9 @@ const Index = () => {
                   onRemoveBill={removeBill}
                   onAddFromSuggestion={addFromSuggestion}
                   onDismissSuggestion={dismissSuggestion}
-                  ignoredVendorCount={Object.keys(ignoredVendors || {}).filter(k => ignoredVendors[k]).length}
+                  ignoredVendorCount={
+                    Object.keys(ignoredVendors || {}).filter((k) => ignoredVendors[k]).length
+                  }
                   onRestoreIgnoredVendors={restoreAllIgnoredVendors}
                 />
                 <BillsBeforePayday
