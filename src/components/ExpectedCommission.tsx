@@ -1,10 +1,16 @@
 import { useState } from 'react';
-import { DollarSign, Calendar, Plus, X, TrendingUp } from 'lucide-react';
+import { DollarSign, Calendar, Plus, X, TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCurrency } from '@/utils/financeUtils';
 import { PendingCommission } from '@/types/finance';
+import {
+  useCommissionStatus,
+  useAdvanceCommission,
+  getNextPayPeriodDate,
+  formatCutoffDescription,
+} from '@/hooks/useCommissionManager';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +33,19 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
   const [expectedDate, setExpectedDate] = useState('');
   const [cutoffDate, setCutoffDate] = useState('');
 
+  const { upcoming, expired, nextCommission, hasExpired } = useCommissionStatus(commissions);
+  const { advanceToNextPeriod } = useAdvanceCommission(onAdd, onRemove);
+
+  // Pre-fill next period date when opening dialog
+  const handleOpenDialog = (isOpen: boolean) => {
+    if (isOpen && !expectedDate) {
+      const nextPeriod = getNextPayPeriodDate(new Date());
+      setExpectedDate(nextPeriod.paymentDate.toISOString().split('T')[0]);
+      setCutoffDate(formatCutoffDescription(nextPeriod));
+    }
+    setOpen(isOpen);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = parseFloat(amount);
@@ -44,14 +63,7 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
     setOpen(false);
   };
 
-  // Get next commission if any
-  // Safely coerce expectedDate to Date (could be string from localStorage)
-  const now = new Date();
-  const nextCommission = commissions
-    .filter(c => new Date(c.expectedDate) >= now)
-    .sort((a, b) => new Date(a.expectedDate).getTime() - new Date(b.expectedDate).getTime())[0];
-
-  const totalPending = commissions.reduce((sum, c) => sum + c.amount, 0);
+  const totalPending = upcoming.reduce((sum, c) => sum + c.amount, 0);
 
   const formatDate = (date: Date | string) => {
     const d = typeof date === 'string' ? new Date(date) : date;
@@ -69,7 +81,7 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
           <TrendingUp className="w-5 h-5 text-income" />
           <h3 className="font-semibold">Expected Commission</h3>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={handleOpenDialog}>
           <DialogTrigger asChild>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
               <Plus className="w-4 h-4" />
@@ -124,6 +136,49 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
         </Dialog>
       </div>
 
+      {/* Expired Commissions Alert */}
+      {hasExpired && (
+        <div className="mb-4 space-y-2">
+          {expired.map((commission) => (
+            <div 
+              key={commission.id}
+              className="p-3 rounded-lg bg-warning/10 border border-warning/30"
+            >
+              <div className="flex items-start gap-2 mb-2">
+                <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-warning">
+                    Commission date passed
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatCurrency(commission.amount)} was expected {formatDate(commission.expectedDate)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs flex-1 border-warning/30 hover:bg-warning/10"
+                  onClick={() => advanceToNextPeriod(commission)}
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Advance to Next Period
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={() => onRemove(commission.id)}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {commissions.length === 0 ? (
         <div className="text-center py-4">
           <p className="text-sm text-muted-foreground">
@@ -154,38 +209,40 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
             </div>
           )}
 
-          {/* Commission List */}
-          <div className="space-y-2">
-            {commissions.map((commission) => (
-              <div 
-                key={commission.id}
-                className="flex items-center justify-between p-2 rounded bg-muted/50 group"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-mono font-medium text-income">
-                      {formatCurrency(commission.amount)}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {formatDate(commission.expectedDate)}
-                      {commission.cutoffDate && ` • ${commission.cutoffDate}`}
-                    </p>
-                  </div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => onRemove(commission.id)}
+          {/* Upcoming Commission List */}
+          {upcoming.length > 1 && (
+            <div className="space-y-2">
+              {upcoming.slice(1).map((commission) => (
+                <div 
+                  key={commission.id}
+                  className="flex items-center justify-between p-2 rounded bg-muted/50 group"
                 >
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-mono font-medium text-income">
+                        {formatCurrency(commission.amount)}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {formatDate(commission.expectedDate)}
+                        {commission.cutoffDate && ` • ${commission.cutoffDate}`}
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => onRemove(commission.id)}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
 
-          {commissions.length > 1 && (
+          {upcoming.length > 1 && (
             <div className="pt-2 border-t border-border">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Total Pending</span>
