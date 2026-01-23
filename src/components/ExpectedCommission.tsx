@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DollarSign, Calendar, Plus, X, TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
+import { DollarSign, Calendar, Plus, X, TrendingUp, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -162,8 +162,8 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
                   className="h-7 text-xs flex-1 border-warning/30 hover:bg-warning/10"
                   onClick={() => advanceToNextPeriod(commission)}
                 >
-                  <RefreshCw className="w-3 h-3 mr-1" />
-                  Advance to Next Period
+                  <X className="w-3 h-3 mr-1" />
+                  Clear Expired
                 </Button>
                 <Button
                   size="sm"
