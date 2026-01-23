@@ -284,7 +284,7 @@ const Index = () => {
                   nextCommission={nextCommission}
                   onAddCommission={handleAddCommission}
                 />
-                <PayPeriodInfo selectedMonth={settings.selectedMonth} />
+                <PayPeriodInfo selectedMonth={settings.selectedMonth} nextCommission={nextCommission} />
                 <RecurringSummary transactions={filteredTransactions} />
               </div>
             </div>
