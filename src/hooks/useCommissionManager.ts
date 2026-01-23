@@ -80,27 +80,19 @@ export function useCommissionStatus(commissions: PendingCommission[]): Commissio
 }
 
 /**
- * Generate an advanced commission for the next pay period.
+ * Clear an expired commission (just removes it without copying the amount).
+ * Commission amounts vary significantly, so we don't pre-fill.
  */
 export function useAdvanceCommission(
-  onAdd: (commission: Omit<PendingCommission, 'id'>) => void,
+  _onAdd: (commission: Omit<PendingCommission, 'id'>) => void,
   onRemove: (id: string) => void
 ) {
   const advanceToNextPeriod = useCallback(
     (expiredCommission: PendingCommission) => {
-      const nextPeriod = getNextPayPeriodDate(new Date());
-      
-      // Add new commission with next period's payment date
-      onAdd({
-        amount: expiredCommission.amount,
-        expectedDate: nextPeriod.paymentDate,
-        cutoffDate: formatCutoffDescription(nextPeriod),
-      });
-      
-      // Remove the expired one
+      // Just remove the expired commission - user will add new one when they know the amount
       onRemove(expiredCommission.id);
     },
-    [onAdd, onRemove]
+    [onRemove]
   );
 
   return { advanceToNextPeriod };
