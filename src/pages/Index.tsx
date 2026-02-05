@@ -193,13 +193,16 @@ const Index = () => {
     }));
   };
 
-  // Next commission
+  // Next commission (timezone-safe; includes commissions dated "today")
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const nextCommission =
     pendingCommissions
-      .filter((c) => new Date(c.expectedDate) >= now)
-      .sort((a, b) => new Date(a.expectedDate).getTime() - new Date(b.expectedDate).getTime())[0] ||
-    null;
+      .filter((c) => parseLocalDate(c.expectedDate) >= todayStart)
+      .sort(
+        (a, b) =>
+          parseLocalDate(a.expectedDate).getTime() - parseLocalDate(b.expectedDate).getTime()
+      )[0] || null;
 
   return (
     <div className="min-h-screen bg-background">
