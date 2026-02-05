@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Bill } from '@/types/bills';
 import { PendingCommission } from '@/types/finance';
 import { getPayPeriods } from '@/utils/financeUtils';
+import { parseLocalDate } from '@/hooks/useCommissionManager';
 
 /**
  * Get the start of day (midnight) for a date.
@@ -65,12 +66,12 @@ export function useNextPayday(nextCommission: PendingCommission | null): PaydayI
       nextPayPeriod = nextPeriods[0];
     }
 
-    // Use commission date if provided and in future
+    // Use parseLocalDate to avoid timezone shifts when comparing dates
     const commissionDate = nextCommission?.expectedDate
-      ? new Date(nextCommission.expectedDate)
+      ? parseLocalDate(nextCommission.expectedDate)
       : null;
 
-    const isFromCommission = !!(commissionDate && commissionDate > today);
+    const isFromCommission = !!(commissionDate && commissionDate >= todayStart);
     const paydayDate = isFromCommission ? commissionDate! : nextPayPeriod!.paymentDate;
     const paydayCutoffEnd = endOfDay(paydayDate);
 

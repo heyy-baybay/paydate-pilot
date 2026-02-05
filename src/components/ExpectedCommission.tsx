@@ -10,6 +10,8 @@ import {
   useAdvanceCommission,
   getNextPayPeriodDate,
   formatCutoffDescription,
+  formatDateForInput,
+  parseLocalDate,
 } from '@/hooks/useCommissionManager';
 import {
   Dialog,
@@ -40,7 +42,8 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
   const handleOpenDialog = (isOpen: boolean) => {
     if (isOpen && !expectedDate) {
       const nextPeriod = getNextPayPeriodDate(new Date());
-      setExpectedDate(nextPeriod.paymentDate.toISOString().split('T')[0]);
+      // Use formatDateForInput to avoid UTC timezone shift
+      setExpectedDate(formatDateForInput(nextPeriod.paymentDate));
       setCutoffDate(formatCutoffDescription(nextPeriod));
     }
     setOpen(isOpen);
@@ -53,7 +56,8 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
     
     onAdd({
       amount: numAmount,
-      expectedDate: new Date(expectedDate),
+      // Use parseLocalDate to create proper local date
+      expectedDate: parseLocalDate(expectedDate),
       cutoffDate: cutoffDate || 'Unknown',
     });
     
@@ -66,7 +70,8 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
   const totalPending = upcoming.reduce((sum, c) => sum + c.amount, 0);
 
   const formatDate = (date: Date | string) => {
-    const d = typeof date === 'string' ? new Date(date) : date;
+    // Use parseLocalDate to ensure correct local date handling
+    const d = parseLocalDate(date);
     return d.toLocaleDateString('en-US', { 
       weekday: 'short',
       month: 'short', 

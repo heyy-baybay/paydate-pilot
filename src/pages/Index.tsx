@@ -13,6 +13,7 @@ import { ExpectedCommission } from '@/components/ExpectedCommission';
 import { useBills } from '@/hooks/useBills';
 import { Transaction, FinanceSettings, PendingCommission } from '@/types/finance';
 import { lsGet, lsSet, lsRemove, lsGetParsed, lsSetJson } from '@/hooks/useStorage';
+import { parseLocalDate } from '@/hooks/useCommissionManager';
 import {
   parseCSV,
   processTransactions,
@@ -36,7 +37,8 @@ function parseStoredCommissions(stored: string | null): PendingCommission[] {
     const parsed = JSON.parse(stored);
     return parsed.map((c: Record<string, unknown>) => ({
       ...c,
-      expectedDate: new Date(c.expectedDate as string),
+      // Use parseLocalDate to avoid timezone shifts
+      expectedDate: parseLocalDate(c.expectedDate as string),
       cutoffDate: c.cutoffDate,
     }));
   } catch {
