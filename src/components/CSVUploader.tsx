@@ -20,17 +20,27 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
     if (lines.length < 2) return { ok: false, error: 'CSV appears to be empty.' };
 
     const headerWindow = lines.slice(0, 25).map((l) => l.toLowerCase());
+    
+    // Chase bank account format: Details,Posting Date,Description,Amount,Type,Balance
     const bankHeaderLine = headerWindow.find((l) => l.startsWith('details,') && l.includes('posting date'));
+    
+    // Chase credit card format: Transaction Date,Post Date,Description,Category,Type,Amount
+    const chaseCardHeaderLine = headerWindow.find((l) => 
+      l.includes('transaction date') && l.includes('post date') && l.includes('amount')
+    );
+    
+    // QuickBooks format
     const qbHeaderLine = headerWindow.find((l) => l.includes('transaction type') && l.includes('account name'));
 
-    if (!bankHeaderLine && !qbHeaderLine) {
+    if (!bankHeaderLine && !qbHeaderLine && !chaseCardHeaderLine) {
       return {
         ok: false,
         error:
-          'Unrecognized CSV format. Expected a bank export header like “Details, Posting Date, Description, Amount, Type, Balance” or a QuickBooks Transaction List by Date export.',
+          'Unrecognized CSV format. Expected a Chase bank/credit card export or QuickBooks Transaction List by Date export.',
       };
     }
 
+    // Only validate required headers for bank format (credit card and QB have different structure)
     if (bankHeaderLine) {
       const headers = bankHeaderLine.split(',').map((h) => h.replace(/"/g, '').trim());
       const required = ['details', 'posting date', 'description', 'amount', 'type', 'balance'];
@@ -76,6 +86,9 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
       setFileName(file.name);
       setStatus('success');
       setStatusMessage(`Parsed ${validation.count} transactions.`);
+      
+      // Call onUpload synchronously and ensure React sees the update
+      console.log('[CSVUploader] Uploading CSV with', validation.count, 'transactions');
       onUpload(content);
     };
     reader.onerror = () => {
@@ -199,7 +212,7 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
           </p>
         </div>
         <p className="text-xs text-muted-foreground">
-          Supports Chase bank and QuickBooks CSV formats
+          Supports Chase bank, credit card, and QuickBooks CSV formats
         </p>
         {status !== 'idle' && (
           <p
