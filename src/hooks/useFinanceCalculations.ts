@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
 import { Bill, BillType } from '@/types/bills';
 import { PendingCommission, Transaction } from '@/types/finance';
-import { getPayPeriods, normalizeVendor, extractVendorName } from '@/utils/financeUtils';
+import { normalizeVendor, extractVendorName } from '@/utils/financeUtils';
+import { 
+  getNextScheduledPaymentDate, 
+  formatPaymentDate, 
+  PayPeriodSchedule 
+} from '@/utils/businessDays';
 
 /**
  * Parse a date string (YYYY-MM-DD) into a local Date object.
@@ -150,7 +155,7 @@ export function resolveBillsFromTransactions(
 }
 
 // ============================================================================
-// PAYDAY CALCULATION
+// PAYDAY CALCULATION (Using Business Day Logic)
 // ============================================================================
 
 export interface PaydayInfo {
@@ -158,34 +163,64 @@ export interface PaydayInfo {
   paydayDateString: string;
   paydayCutoffEnd: Date;
   isFromCommission: boolean;
+  periodLabel: string;
 }
 
 /**
- * Calculate the next payday date based on commission or pay schedule.
+ * Calculate the next payday date based on commission or contract pay schedule.
+ * 
+ * CRITICAL "Today Bridge" Logic:
+ * - If today IS a payment date, we must bridge to the NEXT payment date
+ * - This ensures bills aren't hidden when the commission arrives today
+ * - Uses the Margin Freight schedule: 4th business day after 15th and last of month
  */
 export function useNextPayday(nextCommission: PendingCommission | null): PaydayInfo {
   return useMemo(() => {
     const today = new Date();
     const todayStart = startOfDay(today);
 
-    // Calculate next pay period from schedule
-    const periods = getPayPeriods(today.getFullYear(), today.getMonth());
-    let nextPayPeriod = periods.find((p) => p.paymentDate > today);
+    // Get the next scheduled payment from contract schedule
+    // This automatically handles the "today bridge" - if today is a payment date,
+    // it returns the FOLLOWING payment date
+    const scheduledPayment = getNextScheduledPaymentDate(today);
 
-    if (!nextPayPeriod) {
-      const nextMonth = today.getMonth() === 11 ? 0 : today.getMonth() + 1;
-      const nextYear = today.getMonth() === 11 ? today.getFullYear() + 1 : today.getFullYear();
-      const nextPeriods = getPayPeriods(nextYear, nextMonth);
-      nextPayPeriod = nextPeriods[0];
-    }
-
-    // Use commission date if available and in the future
+    // Check if user has manually entered a commission date
     const commissionDate = nextCommission?.expectedDate
       ? parseLocalDate(nextCommission.expectedDate)
       : null;
 
-    const isFromCommission = !!(commissionDate && commissionDate >= todayStart);
-    const paydayDate = isFromCommission ? commissionDate! : nextPayPeriod!.paymentDate;
+    // Determine which date to use:
+    // - If commission date is TODAY, bridge to next scheduled payment
+    // - If commission date is in the future, use it
+    // - Otherwise, use scheduled payment
+    let paydayDate: Date;
+    let isFromCommission = false;
+    let periodLabel = scheduledPayment.periodLabel;
+
+    if (commissionDate) {
+      const commDateStart = startOfDay(commissionDate);
+      
+      if (commDateStart.getTime() === todayStart.getTime()) {
+        // Commission is TODAY - bridge to next scheduled payment
+        paydayDate = scheduledPayment.paymentDate;
+        isFromCommission = false;
+        // Period label comes from scheduled payment
+      } else if (commDateStart > todayStart) {
+        // Commission is in the future - use it
+        paydayDate = commissionDate;
+        isFromCommission = true;
+        periodLabel = 'Expected Commission';
+      } else {
+        // Commission is in the past - use scheduled payment
+        paydayDate = scheduledPayment.paymentDate;
+        isFromCommission = false;
+      }
+    } else {
+      // No commission entered - use scheduled payment
+      paydayDate = scheduledPayment.paymentDate;
+      isFromCommission = false;
+    }
+
     const paydayCutoffEnd = endOfDay(paydayDate);
 
     return {
@@ -193,6 +228,7 @@ export function useNextPayday(nextCommission: PendingCommission | null): PaydayI
       paydayDateString: formatDateString(paydayDate),
       paydayCutoffEnd,
       isFromCommission,
+      periodLabel,
     };
   }, [nextCommission]);
 }
