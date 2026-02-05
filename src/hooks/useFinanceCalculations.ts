@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Bill } from '@/types/bills';
+import { Bill, BillType } from '@/types/bills';
 import { PendingCommission } from '@/types/finance';
 import { getPayPeriods } from '@/utils/financeUtils';
 import { parseLocalDate } from '@/hooks/useCommissionManager';

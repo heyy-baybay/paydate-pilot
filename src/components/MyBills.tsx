@@ -11,12 +11,13 @@ import {
   SlidersHorizontal,
   RotateCcw,
 } from 'lucide-react';
-import { Bill, SuggestedVendor } from '@/types/bills';
+import { Bill, SuggestedVendor, BillType } from '@/types/bills';
 import { formatCurrency } from '@/utils/financeUtils';
 import { getOrdinal } from '@/hooks/useFinanceCalculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import {
   Collapsible,
@@ -30,6 +31,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface MyBillsProps {
   bills: Bill[];
@@ -55,15 +63,24 @@ interface BillsManagerContentProps {
 function BillsManagerContent({
   bills,
   suggestedVendors,
+  onAddBill,
   onUpdateBill,
   onRemoveBill,
   onAddFromSuggestion,
   onDismissSuggestion,
-}: BillsManagerContentProps) {
+}: BillsManagerContentProps & { onAddBill: (bill: Omit<Bill, 'id'>) => void }) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [showBills, setShowBills] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ vendor: '', amount: '', dueDay: '' });
+  const [newBillForm, setNewBillForm] = useState({
+    vendor: '',
+    amount: '',
+    dueDay: String(new Date().getDate()),
+    type: 'one-time' as BillType,
+    category: 'Miscellaneous',
+  });
 
   const startEdit = (bill: Bill) => {
     setEditingId(bill.id);
@@ -83,10 +100,123 @@ function BillsManagerContent({
     setEditingId(null);
   };
 
+  const handleAddBill = () => {
+    const amount = parseFloat(newBillForm.amount);
+    if (!newBillForm.vendor.trim() || isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid vendor and amount');
+      return;
+    }
+
+    onAddBill({
+      vendor: newBillForm.vendor.trim(),
+      amount,
+      dueDay: parseInt(newBillForm.dueDay) || 1,
+      category: newBillForm.category,
+      active: true,
+      type: newBillForm.type,
+    });
+
+    toast.success('Bill added', { description: newBillForm.vendor });
+    setNewBillForm({
+      vendor: '',
+      amount: '',
+      dueDay: String(new Date().getDate()),
+      type: 'one-time',
+      category: 'Miscellaneous',
+    });
+    setShowAddForm(false);
+  };
+
   const activeBills = bills.filter((b) => b.active);
+
+  const recurringBills = activeBills.filter((b) => b.type === 'recurring' || !b.type);
+  const oneTimeBills = activeBills.filter((b) => b.type === 'one-time');
 
   return (
     <div className="space-y-4">
+      {/* Add Bill Button */}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => setShowAddForm(!showAddForm)}
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Add One-Time Bill
+      </Button>
+
+      {/* Add Bill Form */}
+      {showAddForm && (
+        <div className="p-4 rounded-lg bg-muted/50 border border-border space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Vendor Name</Label>
+            <Input
+              value={newBillForm.vendor}
+              onChange={(e) => setNewBillForm({ ...newBillForm, vendor: e.target.value })}
+              placeholder="e.g., Electric Company"
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Amount</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={newBillForm.amount}
+                onChange={(e) => setNewBillForm({ ...newBillForm, amount: e.target.value })}
+                placeholder="150.00"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Due Day</Label>
+              <Input
+                type="number"
+                min="1"
+                max="31"
+                value={newBillForm.dueDay}
+                onChange={(e) => setNewBillForm({ ...newBillForm, dueDay: e.target.value })}
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Type</Label>
+            <Select
+              value={newBillForm.type}
+              onValueChange={(value: BillType) => setNewBillForm({ ...newBillForm, type: value })}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="one-time">One-Time</SelectItem>
+                <SelectItem value="recurring">Recurring (Monthly)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs flex-1"
+              onClick={handleAddBill}
+            >
+              Add Bill
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setShowAddForm(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Suggestions Section */}
       {suggestedVendors.length > 0 && (
         <Collapsible open={showSuggestions} onOpenChange={setShowSuggestions}>
@@ -185,97 +315,178 @@ function BillsManagerContent({
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 space-y-4">
             {activeBills.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
                 No bills added yet. Add from suggestions above or create manually.
               </p>
             ) : (
-              activeBills.map((bill) => (
-                <div key={bill.id} className="p-3 rounded-lg bg-muted/50 border border-border">
-                  {editingId === bill.id ? (
+              <>
+                {/* One-Time Bills */}
+                {oneTimeBills.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                      One-Time Bills ({oneTimeBills.length})
+                    </p>
                     <div className="space-y-2">
-                      <Input
-                        value={editForm.vendor}
-                        onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })}
-                        placeholder="Vendor name"
-                        className="h-8 text-sm"
-                      />
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          value={editForm.amount}
-                          onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                          placeholder="Amount"
-                          className="h-8 text-sm flex-1"
+                      {oneTimeBills.map((bill) => (
+                        <BillRow
+                          key={bill.id}
+                          bill={bill}
+                          editingId={editingId}
+                          editForm={editForm}
+                          setEditForm={setEditForm}
+                          startEdit={startEdit}
+                          saveEdit={saveEdit}
+                          setEditingId={setEditingId}
+                          onRemoveBill={onRemoveBill}
                         />
-                        <Input
-                          type="number"
-                          min="1"
-                          max="31"
-                          value={editForm.dueDay}
-                          onChange={(e) => setEditForm({ ...editForm, dueDay: e.target.value })}
-                          placeholder="Day"
-                          className="h-8 text-sm w-16"
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recurring Bills */}
+                {recurringBills.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                      Recurring Bills ({recurringBills.length})
+                    </p>
+                    <div className="space-y-2">
+                      {recurringBills.map((bill) => (
+                        <BillRow
+                          key={bill.id}
+                          bill={bill}
+                          editingId={editingId}
+                          editForm={editForm}
+                          setEditForm={setEditForm}
+                          startEdit={startEdit}
+                          saveEdit={saveEdit}
+                          setEditingId={setEditingId}
+                          onRemoveBill={onRemoveBill}
                         />
-                      </div>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7"
-                          onClick={() => setEditingId(null)}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-primary"
-                          onClick={() => saveEdit(bill.id)}
-                        >
-                          <Check className="w-3 h-3" />
-                        </Button>
-                      </div>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate" title={bill.vendor}>
-                          {bill.vendor}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatCurrency(bill.amount)} • {getOrdinal(bill.dueDay)} of month
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => startEdit(bill)}
-                          title="Edit"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-expense"
-                          onClick={() => onRemoveBill(bill.id)}
-                          title="Remove (also prevents it from being suggested again)"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
+                  </div>
+                )}
+              </>
             )}
           </div>
         </CollapsibleContent>
       </Collapsible>
+    </div>
+  );
+}
+
+interface BillRowProps {
+  bill: Bill;
+  editingId: string | null;
+  editForm: { vendor: string; amount: string; dueDay: string };
+  setEditForm: (form: { vendor: string; amount: string; dueDay: string }) => void;
+  startEdit: (bill: Bill) => void;
+  saveEdit: (id: string) => void;
+  setEditingId: (id: string | null) => void;
+  onRemoveBill: (id: string) => void;
+}
+
+function BillRow({
+  bill,
+  editingId,
+  editForm,
+  setEditForm,
+  startEdit,
+  saveEdit,
+  setEditingId,
+  onRemoveBill,
+}: BillRowProps) {
+  if (editingId === bill.id) {
+    return (
+      <div className="p-3 rounded-lg bg-muted/50 border border-border space-y-2">
+        <Input
+          value={editForm.vendor}
+          onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })}
+          placeholder="Vendor name"
+          className="h-8 text-sm"
+        />
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            value={editForm.amount}
+            onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+            placeholder="Amount"
+            className="h-8 text-sm flex-1"
+          />
+          <Input
+            type="number"
+            min="1"
+            max="31"
+            value={editForm.dueDay}
+            onChange={(e) => setEditForm({ ...editForm, dueDay: e.target.value })}
+            placeholder="Day"
+            className="h-8 text-sm w-16"
+          />
+        </div>
+        <div className="flex justify-end gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7"
+            onClick={() => setEditingId(null)}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-primary"
+            onClick={() => saveEdit(bill.id)}
+          >
+            <Check className="w-3 h-3" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 rounded-lg bg-muted/50 border border-border">
+      <div className="flex items-center justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium truncate" title={bill.vendor}>
+              {bill.vendor}
+            </p>
+            {bill.type === 'one-time' && (
+              <Badge variant="outline" className="text-xs">
+                One-time
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {formatCurrency(bill.amount)} • {getOrdinal(bill.dueDay)} of month
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            onClick={() => startEdit(bill)}
+            title="Edit"
+          >
+            <Edit2 className="w-3 h-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-expense"
+            onClick={() => onRemoveBill(bill.id)}
+            title="Remove (also prevents it from being suggested again)"
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -330,6 +541,7 @@ export function MyBills({
                 <BillsManagerContent
                   bills={bills}
                   suggestedVendors={suggestedVendors}
+                  onAddBill={onAddBill}
                   onUpdateBill={onUpdateBill}
                   onRemoveBill={onRemoveBill}
                   onAddFromSuggestion={onAddFromSuggestion}
