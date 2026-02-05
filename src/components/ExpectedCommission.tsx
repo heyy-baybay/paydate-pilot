@@ -230,10 +230,20 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
         <div className="space-y-3">
           {/* Next Commission Highlight */}
           {nextCommission && (
-            <div className="p-3 rounded-lg bg-income/10 border border-income/20">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                Next Deposit
-              </p>
+            <div className="p-3 rounded-lg bg-income/10 border border-income/20 group">
+              <div className="flex items-start justify-between mb-1">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Next Deposit
+                </p>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6 -mt-1 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => onRemove(nextCommission.id)}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
               <div className="flex items-end justify-between">
                 <div>
                   <p className="text-2xl font-bold font-mono text-income">
@@ -241,6 +251,9 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {formatDate(nextCommission.expectedDate)}
+                    {nextCommission.cutoffDate && (
+                      <span className="ml-2 text-xs">• Good through {nextCommission.cutoffDate}</span>
+                    )}
                   </p>
                 </div>
               </div>
