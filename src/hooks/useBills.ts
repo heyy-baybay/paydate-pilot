@@ -197,6 +197,7 @@ export function useBills(transactions: Transaction[]) {
           category: tx.category,
           active: true,
           type: 'recurring' as const,
+          isResolved: false,
         },
       ];
     });
@@ -222,6 +223,7 @@ export function useBills(transactions: Transaction[]) {
       category: suggestion.category,
       active: true,
       type: 'recurring',
+      isResolved: false,
     };
     addBill(newBill);
   };

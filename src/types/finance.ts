@@ -64,9 +64,15 @@ export interface FinanceSettings {
   selectedMonth: string | null;
 }
 
+/**
+ * Commission dates are stored as YYYY-MM-DD strings to prevent timezone issues.
+ * Use parseLocalDate() when converting to Date objects.
+ */
 export interface PendingCommission {
   id: string;
   amount: number;
-  expectedDate: Date;
+  /** Expected deposit date as YYYY-MM-DD string */
+  expectedDate: string;
+  /** Cutoff date description */
   cutoffDate: string;
 }

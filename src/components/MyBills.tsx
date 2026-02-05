@@ -114,6 +114,7 @@ function BillsManagerContent({
       category: newBillForm.category,
       active: true,
       type: newBillForm.type,
+      isResolved: false,
     });
 
     toast.success('Bill added', { description: newBillForm.vendor });

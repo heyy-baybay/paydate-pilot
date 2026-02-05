@@ -1,26 +1,26 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Wallet } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Wallet, Upload } from 'lucide-react';
 import { CSVUploader } from '@/components/CSVUploader';
 import { TransactionTable } from '@/components/TransactionTable';
 import { SummaryCards } from '@/components/SummaryCards';
 import { MonthFilter } from '@/components/MonthFilter';
 import { BalanceSettings } from '@/components/BalanceSettings';
 import { RecurringSummary } from '@/components/RecurringSummary';
-import { PayPeriodInfo } from '@/components/PayPeriodInfo';
-import { MyBills } from '@/components/MyBills';
-import { BillForecast } from '@/components/BillForecast';
-import { ExpectedCommission } from '@/components/ExpectedCommission';
+import { InputsColumn } from '@/components/dashboard/InputsColumn';
+import { ForecastColumn } from '@/components/dashboard/ForecastColumn';
 import { useBills } from '@/hooks/useBills';
+import { useDashboardFinance, parseLocalDate, formatDateString } from '@/hooks/useFinanceCalculations';
 import { Transaction, FinanceSettings, PendingCommission } from '@/types/finance';
 import { lsGet, lsSet, lsRemove, lsGetParsed, lsSetJson } from '@/hooks/useStorage';
-import { parseLocalDate } from '@/hooks/useCommissionManager';
 import {
   parseCSV,
   processTransactions,
   getUniqueMonths,
   generateMonthSummary,
+  normalizeVendor,
+  extractVendorName,
 } from '@/utils/financeUtils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const STORAGE_KEYS = {
   RAW_DATA: 'cashflow_raw_data',
@@ -30,18 +30,12 @@ const STORAGE_KEYS = {
 } as const;
 
 /**
- * Parse stored commissions, converting date strings back to Date objects.
+ * Parse stored commissions (they're already strings, just parse JSON).
  */
 function parseStoredCommissions(stored: string | null): PendingCommission[] {
   if (!stored) return [];
   try {
-    const parsed = JSON.parse(stored);
-    return parsed.map((c: Record<string, unknown>) => ({
-      ...c,
-      // Use parseLocalDate to avoid timezone shifts
-      expectedDate: parseLocalDate(c.expectedDate as string),
-      cutoffDate: c.cutoffDate,
-    }));
+    return JSON.parse(stored);
   } catch {
     return [];
   }
@@ -154,6 +148,22 @@ const Index = () => {
     restoreAllIgnoredVendors,
   } = useBills(transactionsWithOverrides);
 
+  // Next commission (timezone-safe; includes commissions dated "today")
+  const todayString = formatDateString(new Date());
+  const nextCommission = useMemo(() => {
+    return pendingCommissions
+      .filter((c) => c.expectedDate >= todayString)
+      .sort((a, b) => a.expectedDate.localeCompare(b.expectedDate))[0] || null;
+  }, [pendingCommissions, todayString]);
+
+  // Dashboard finance calculations
+  const dashboardFinance = useDashboardFinance(
+    bills,
+    transactionsWithOverrides,
+    currentBalance,
+    nextCommission
+  );
+
   // Handlers
   const handleCSVUpload = (content: string) => {
     setRawData(content);
@@ -165,22 +175,22 @@ const Index = () => {
     }
   };
 
-  const handleAddCommission = (commission: Omit<PendingCommission, 'id'>) => {
+  const handleAddCommission = useCallback((commission: Omit<PendingCommission, 'id'>) => {
     setPendingCommissions((prev) => [
       ...prev,
       { ...commission, id: `commission-${Date.now()}` },
     ]);
-  };
+  }, []);
 
-  const handleRemoveCommission = (id: string) => {
+  const handleRemoveCommission = useCallback((id: string) => {
     setPendingCommissions((prev) => prev.filter((c) => c.id !== id));
-  };
+  }, []);
 
-  const handleUpdateTransaction = (
+  const handleUpdateTransaction = useCallback((
     id: string,
     updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>
   ) => {
-    // If marking as recurring, also create a bill entry using average from history
+    // If marking as recurring, also create a bill entry
     if (updates.isRecurring === true) {
       const tx = transactionsWithOverrides.find((t) => t.id === id);
       if (tx && !tx.isRecurring) {
@@ -188,14 +198,13 @@ const Index = () => {
       }
     }
 
-    // If updating category, also update the bill's category if exists
+    // If updating category, also update matching bill's category
     if (updates.category) {
       const tx = transactionsWithOverrides.find((t) => t.id === id);
       if (tx) {
-        // Find matching bill and update its category
+        const txVendorKey = normalizeVendor(extractVendorName(tx.description) || tx.description).toLowerCase();
         const matchingBill = bills.find(
-          (b) => b.vendor.toLowerCase() === tx.description.toLowerCase() ||
-                 b.vendor.toLowerCase().includes(tx.description.toLowerCase().slice(0, 10))
+          (b) => normalizeVendor(b.vendor).toLowerCase() === txVendorKey
         );
         if (matchingBill) {
           updateBill(matchingBill.id, { category: updates.category });
@@ -207,21 +216,37 @@ const Index = () => {
       ...prev,
       [id]: { ...prev[id], ...updates },
     }));
-  };
+  }, [transactionsWithOverrides, addBillFromTransaction, bills, updateBill]);
 
-  // Next commission (timezone-safe; includes commissions dated "today")
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const nextCommission =
-    pendingCommissions
-      .filter((c) => parseLocalDate(c.expectedDate) >= todayStart)
-      .sort(
-        (a, b) =>
-          parseLocalDate(a.expectedDate).getTime() - parseLocalDate(b.expectedDate).getTime()
-      )[0] || null;
+  // Empty state
+  if (transactions.length === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+          <div className="container py-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-primary/10">
+                <Wallet className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">CashFlow Pro</h1>
+                <p className="text-xs text-muted-foreground">Commission Pay Period Manager</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="container py-12">
+          <div className="max-w-xl mx-auto animate-fade-in">
+            <CSVUploader onUpload={handleCSVUpload} hasData={false} />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container py-4">
@@ -236,126 +261,84 @@ const Index = () => {
               </div>
             </div>
 
-            {transactions.length > 0 && (
-              <div className="flex items-center gap-3">
-                <MonthFilter
-                  months={uniqueMonths}
-                  selectedMonth={settings.selectedMonth}
-                  onMonthChange={(month) => setSettings((s) => ({ ...s, selectedMonth: month }))}
-                />
-                <BalanceSettings
-                  startingBalance={settings.startingBalance}
-                  lowBalanceThreshold={settings.lowBalanceThreshold}
-                  onStartingBalanceChange={(val) =>
-                    setSettings((s) => ({ ...s, startingBalance: val }))
-                  }
-                  onThresholdChange={(val) =>
-                    setSettings((s) => ({ ...s, lowBalanceThreshold: val }))
-                  }
-                />
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              <MonthFilter
+                months={uniqueMonths}
+                selectedMonth={settings.selectedMonth}
+                onMonthChange={(month) => setSettings((s) => ({ ...s, selectedMonth: month }))}
+              />
+              <BalanceSettings
+                startingBalance={settings.startingBalance}
+                lowBalanceThreshold={settings.lowBalanceThreshold}
+                onStartingBalanceChange={(val) =>
+                  setSettings((s) => ({ ...s, startingBalance: val }))
+                }
+                onThresholdChange={(val) =>
+                  setSettings((s) => ({ ...s, lowBalanceThreshold: val }))
+                }
+              />
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="container py-6 space-y-6">
-        {transactions.length === 0 ? (
-          <div className="max-w-xl mx-auto py-12 animate-fade-in">
-            <CSVUploader onUpload={handleCSVUpload} hasData={false} />
+      {/* Summary Cards */}
+      <div className="container py-4">
+        <SummaryCards summary={currentSummary} currentBalance={currentBalance} />
+      </div>
+
+      {/* Three-Column Layout */}
+      <main className="container flex-1 pb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
+          {/* Left Column: Inputs */}
+          <div className="lg:col-span-3">
+            <InputsColumn
+              commissions={pendingCommissions}
+              onAddCommission={handleAddCommission}
+              onRemoveCommission={handleRemoveCommission}
+              bills={bills}
+              onAddBill={addBill}
+              suggestedVendors={suggestedVendors}
+              onAddFromSuggestion={addFromSuggestion}
+              onDismissSuggestion={dismissSuggestion}
+              onUpdateBill={updateBill}
+              onRemoveBill={removeBill}
+              ignoredVendorCount={Object.keys(ignoredVendors || {}).filter((k) => ignoredVendors[k]).length}
+              onRestoreIgnoredVendors={restoreAllIgnoredVendors}
+              onUploadCSV={handleCSVUpload}
+            />
           </div>
-        ) : (
-          <>
-            <SummaryCards summary={currentSummary} currentBalance={currentBalance} />
 
-            {/* Main Content Area with Tabs */}
-            <Tabs defaultValue="forecast" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-6">
-                <TabsTrigger value="forecast">Bill Forecast</TabsTrigger>
-                <TabsTrigger value="transactions">Transactions</TabsTrigger>
-                <TabsTrigger value="settings">Settings</TabsTrigger>
-              </TabsList>
-
-              {/* Bill Forecast Tab */}
-              <TabsContent value="forecast" className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Main Forecast Section */}
-                  <div className="lg:col-span-2">
-                    <BillForecast
-                      bills={bills}
-                      transactions={transactionsWithOverrides}
-                      currentBalance={currentBalance}
-                      nextCommission={nextCommission}
-                      onAddCommission={handleAddCommission}
-                    />
-                  </div>
-
-                  {/* Sidebar */}
-                  <div className="space-y-4">
-                    <ExpectedCommission
-                      commissions={pendingCommissions}
-                      onAdd={handleAddCommission}
-                      onRemove={handleRemoveCommission}
-                    />
-                    <MyBills
-                      bills={bills}
-                      suggestedVendors={suggestedVendors}
-                      onAddBill={addBill}
-                      onUpdateBill={updateBill}
-                      onRemoveBill={removeBill}
-                      onAddFromSuggestion={addFromSuggestion}
-                      onDismissSuggestion={dismissSuggestion}
-                      ignoredVendorCount={
-                        Object.keys(ignoredVendors || {}).filter((k) => ignoredVendors[k]).length
-                      }
-                      onRestoreIgnoredVendors={restoreAllIgnoredVendors}
-                    />
-                    <PayPeriodInfo selectedMonth={settings.selectedMonth} nextCommission={nextCommission} />
-                  </div>
+          {/* Center Column: Transaction Table */}
+          <div className="lg:col-span-6">
+            <div className="rounded-xl border border-border bg-card h-full flex flex-col">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <h3 className="font-semibold">Transactions</h3>
+                <span className="text-sm text-muted-foreground">
+                  {filteredTransactions.length} records
+                </span>
+              </div>
+              <ScrollArea className="flex-1">
+                <div className="p-4">
+                  <TransactionTable
+                    transactions={filteredTransactions}
+                    lowBalanceThreshold={settings.lowBalanceThreshold}
+                    onUpdateTransaction={handleUpdateTransaction}
+                  />
                 </div>
-              </TabsContent>
+              </ScrollArea>
+            </div>
+          </div>
 
-              {/* Transactions Tab */}
-              <TabsContent value="transactions" className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                  <div className="lg:col-span-3">
-                    <TransactionTable
-                      transactions={filteredTransactions}
-                      lowBalanceThreshold={settings.lowBalanceThreshold}
-                      onUpdateTransaction={handleUpdateTransaction}
-                    />
-                  </div>
-                  <div className="space-y-4">
-                    <CSVUploader onUpload={handleCSVUpload} hasData={true} />
-                    <RecurringSummary transactions={filteredTransactions} />
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Settings Tab */}
-              <TabsContent value="settings" className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-border bg-card p-6">
-                      <h3 className="font-semibold mb-4">Data Management</h3>
-                      <CSVUploader onUpload={handleCSVUpload} hasData={true} />
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-border bg-card p-6">
-                      <h3 className="font-semibold mb-4">Commission Management</h3>
-                      <ExpectedCommission
-                        commissions={pendingCommissions}
-                        onAdd={handleAddCommission}
-                        onRemove={handleRemoveCommission}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
+          {/* Right Column: Forecasting */}
+          <div className="lg:col-span-3">
+            <ForecastColumn
+              dashboardFinance={dashboardFinance}
+              currentBalance={currentBalance}
+              nextCommission={nextCommission}
+            />
+          </div>
+        </div>
       </main>
 
       {/* Footer */}

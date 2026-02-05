@@ -56,9 +56,15 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0 || !expectedDate) return;
     
+    // Format date as YYYY-MM-DD string for storage
+    const year = expectedDate.getFullYear();
+    const month = String(expectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(expectedDate.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+    
     onAdd({
       amount: numAmount,
-      expectedDate: expectedDate,
+      expectedDate: dateString,
       cutoffDate: cutoffDate ? format(cutoffDate, 'MMM d, yyyy') : 'Unknown',
     });
     
