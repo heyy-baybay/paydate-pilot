@@ -326,10 +326,16 @@ export function useBillsBeforePayday(
 export interface FinancialProjection {
   /** Sum of all UNRESOLVED bills due before payday */
   amountToKeep: number;
-  /** Current Balance - Amount to Keep */
+  /** Current Balance (+ today's commission if applicable) */
+  liquidityBalance: number;
+  /** Liquidity Balance - Amount to Keep */
   safeToSpend: number;
-  /** Safe to Spend + Expected Commission */
+  /** Safe to Spend + future expected commission (if not already included today) */
   projectedBalance: number;
+  /** Commission amount added on top of safeToSpend (0 if commission is today and already included) */
+  commissionForProjection: number;
+  /** Whether today's commission was applied into liquidity */
+  commissionAppliedToday: boolean;
   /** Number of bills resolved */
   resolvedCount: number;
   /** Number of bills still pending */
@@ -356,24 +362,42 @@ export function useFinancialProjection(
   nextCommission: PendingCommission | null
 ): FinancialProjection {
   return useMemo(() => {
+    const todayStart = startOfDay(new Date());
+
     // Only include UNRESOLVED bills in Amount to Keep
     const unresolvedBills = billsBeforePayday.filter((b) => !b.isResolved);
     const resolvedBills = billsBeforePayday.filter((b) => b.isResolved);
 
     const amountToKeep = unresolvedBills.reduce((sum, bill) => sum + bill.amount, 0);
-    const safeToSpend = currentBalance - amountToKeep;
-    const commissionAmount = nextCommission?.amount || 0;
-    const projectedBalance = safeToSpend + commissionAmount;
 
-    const shortfall = Math.max(0, amountToKeep - currentBalance);
+    // If commission is expected TODAY, include it in liquidity immediately
+    const commissionAmount = nextCommission?.amount || 0;
+    const commissionDate = nextCommission?.expectedDate ? parseLocalDate(nextCommission.expectedDate) : null;
+    const commissionAppliedToday = !!(
+      commissionDate && startOfDay(commissionDate).getTime() === todayStart.getTime()
+    );
+
+    const liquidityBalance = currentBalance + (commissionAppliedToday ? commissionAmount : 0);
+    const safeToSpend = liquidityBalance - amountToKeep;
+
+    // Avoid double-counting: if commission is today, it's already in liquidity
+    const commissionForProjection = commissionAppliedToday ? 0 : commissionAmount;
+    const projectedBalance = safeToSpend + commissionForProjection;
+
+    const shortfall = Math.max(0, amountToKeep - liquidityBalance);
     const isShort = shortfall > 0;
     const coveragePercent =
-      amountToKeep > 0 ? Math.min(100, Math.round((currentBalance / amountToKeep) * 100)) : 100;
+      amountToKeep > 0
+        ? Math.min(100, Math.round((liquidityBalance / amountToKeep) * 100))
+        : 100;
 
     return {
       amountToKeep,
+      liquidityBalance,
       safeToSpend,
       projectedBalance,
+      commissionForProjection,
+      commissionAppliedToday,
       resolvedCount: resolvedBills.length,
       pendingCount: unresolvedBills.length,
       coveragePercent,
