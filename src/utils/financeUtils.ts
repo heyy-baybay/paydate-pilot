@@ -328,14 +328,16 @@ export function extractVendorName(description: string): string {
   return normalizeVendor(best || text);
 }
 
-// Calculate pay periods
+// Calculate pay periods using business day logic
+import { getNthBusinessDayAfter, getLastDayOfMonth } from './businessDays';
+
 export function getPayPeriods(year: number, month: number): PayPeriod[] {
   const periods: PayPeriod[] = [];
   
   // First cutoff: 15th of month
   const firstCutoff = new Date(year, month, 15);
-  const firstCalc = getNextBusinessDay(firstCutoff, 1);
-  const firstPayment = getNextBusinessDay(firstCutoff, 4);
+  const firstCalc = getNthBusinessDayAfter(firstCutoff, 1);
+  const firstPayment = getNthBusinessDayAfter(firstCutoff, 4);
   
   periods.push({
     cutoffDate: firstCutoff,
@@ -344,9 +346,9 @@ export function getPayPeriods(year: number, month: number): PayPeriod[] {
   });
   
   // Second cutoff: Last day of month
-  const lastDay = new Date(year, month + 1, 0);
-  const secondCalc = getNextBusinessDay(lastDay, 1);
-  const secondPayment = getNextBusinessDay(lastDay, 4);
+  const lastDay = getLastDayOfMonth(year, month);
+  const secondCalc = getNthBusinessDayAfter(lastDay, 1);
+  const secondPayment = getNthBusinessDayAfter(lastDay, 4);
   
   periods.push({
     cutoffDate: lastDay,
@@ -355,21 +357,6 @@ export function getPayPeriods(year: number, month: number): PayPeriod[] {
   });
   
   return periods;
-}
-
-function getNextBusinessDay(fromDate: Date, daysAfter: number): Date {
-  let date = new Date(fromDate);
-  let businessDays = 0;
-  
-  while (businessDays < daysAfter) {
-    date.setDate(date.getDate() + 1);
-    const dayOfWeek = date.getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      businessDays++;
-    }
-  }
-  
-  return date;
 }
 
 // Determine if transaction impacts pay period cash flow

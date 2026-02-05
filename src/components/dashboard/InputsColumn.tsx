@@ -6,13 +6,11 @@ import {
   Plus, 
   X, 
   TrendingUp, 
-  Upload,
   ChevronDown,
   ChevronUp,
   Sparkles,
   Trash2,
-  Edit2,
-  Check,
+  Calculator,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/utils/financeUtils';
 import { PendingCommission } from '@/types/finance';
-import { Bill, SuggestedVendor, BillType } from '@/types/bills';
+import { Bill, SuggestedVendor } from '@/types/bills';
 import { getOrdinal } from '@/hooks/useFinanceCalculations';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
@@ -32,13 +30,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { calculateCommission, CommissionBreakdown } from '@/utils/commissionCalculator';
+import { ContractInfo } from './ContractInfo';
+import { getNextScheduledPaymentDate, formatPaymentDate } from '@/utils/businessDays';
 
 interface InputsColumnProps {
   commissions: PendingCommission[];
@@ -71,14 +65,20 @@ export function InputsColumn({
   onRestoreIgnoredVendors,
   onUploadCSV,
 }: InputsColumnProps) {
+  const [currentBreakdown, setCurrentBreakdown] = useState<CommissionBreakdown | null>(null);
+
   return (
     <ScrollArea className="h-[calc(100vh-220px)]">
       <div className="space-y-4 pr-2">
-        {/* Commission Entry */}
+        {/* Contract Info Widget */}
+        <ContractInfo currentBreakdown={currentBreakdown} />
+
+        {/* Commission Entry with Calculator */}
         <CommissionEntry
           commissions={commissions}
           onAdd={onAddCommission}
           onRemove={onRemoveCommission}
+          onBreakdownChange={setCurrentBreakdown}
         />
 
         {/* One-Time Bill Entry */}
@@ -108,30 +108,65 @@ interface CommissionEntryProps {
   commissions: PendingCommission[];
   onAdd: (commission: Omit<PendingCommission, 'id'>) => void;
   onRemove: (id: string) => void;
+  onBreakdownChange: (breakdown: CommissionBreakdown | null) => void;
 }
 
-function CommissionEntry({ commissions, onAdd, onRemove }: CommissionEntryProps) {
-  const [amount, setAmount] = useState('');
+function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: CommissionEntryProps) {
+  const [useCalculator, setUseCalculator] = useState(false);
+  const [manualAmount, setManualAmount] = useState('');
+  const [grossProfit, setGrossProfit] = useState('');
+  const [grossRevenue, setGrossRevenue] = useState('');
   const [expectedDate, setExpectedDate] = useState<Date | undefined>();
+  
+  // Get next scheduled payment date for default
+  const nextScheduledPayment = getNextScheduledPaymentDate();
+
+  const calculatedBreakdown = (() => {
+    if (!useCalculator) return null;
+    const gp = parseFloat(grossProfit) || 0;
+    const gr = parseFloat(grossRevenue) || 0;
+    if (gp <= 0) return null;
+    return calculateCommission({ grossProfit: gp, grossRevenue: gr });
+  })();
+
+  // Update parent with breakdown
+  useState(() => {
+    onBreakdownChange(calculatedBreakdown);
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0 || !expectedDate) return;
     
-    const year = expectedDate.getFullYear();
-    const month = String(expectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(expectedDate.getDate()).padStart(2, '0');
+    let finalAmount: number;
+    if (useCalculator && calculatedBreakdown) {
+      finalAmount = calculatedBreakdown.netPayout;
+    } else {
+      finalAmount = parseFloat(manualAmount);
+    }
+    
+    if (isNaN(finalAmount) || finalAmount <= 0) {
+      toast.error('Please enter valid amounts');
+      return;
+    }
+    
+    const depositDate = expectedDate || nextScheduledPayment.paymentDate;
+    const year = depositDate.getFullYear();
+    const month = String(depositDate.getMonth() + 1).padStart(2, '0');
+    const day = String(depositDate.getDate()).padStart(2, '0');
     const dateString = `${year}-${month}-${day}`;
     
     onAdd({
-      amount: numAmount,
+      amount: finalAmount,
       expectedDate: dateString,
       cutoffDate: '',
     });
     
-    setAmount('');
+    // Reset form
+    setManualAmount('');
+    setGrossProfit('');
+    setGrossRevenue('');
     setExpectedDate(undefined);
+    onBreakdownChange(null);
     toast.success('Commission added');
   };
 
@@ -143,9 +178,26 @@ function CommissionEntry({ commissions, onAdd, onRemove }: CommissionEntryProps)
 
   return (
     <div className="rounded-xl border border-income/20 bg-card p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="w-5 h-5 text-income" />
-        <h3 className="font-semibold">Expected Commission</h3>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-income" />
+          <h3 className="font-semibold">Expected Commission</h3>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-6 px-2 text-xs",
+            useCalculator && "bg-primary/10"
+          )}
+          onClick={() => {
+            setUseCalculator(!useCalculator);
+            onBreakdownChange(null);
+          }}
+        >
+          <Calculator className="w-3 h-3 mr-1" />
+          {useCalculator ? 'Manual' : 'Calculate'}
+        </Button>
       </div>
 
       {/* Existing Commissions */}
@@ -177,20 +229,88 @@ function CommissionEntry({ commissions, onAdd, onRemove }: CommissionEntryProps)
 
       {/* Add Form */}
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Payout Amount</Label>
-          <div className="relative">
-            <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="15987.04"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="h-8 pl-7 text-sm"
-            />
-          </div>
-        </div>
+        {useCalculator ? (
+          <>
+            {/* Calculator Mode */}
+            <div className="space-y-1">
+              <Label className="text-xs">Gross Profit</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="45000"
+                  value={grossProfit}
+                  onChange={(e) => {
+                    setGrossProfit(e.target.value);
+                    const gp = parseFloat(e.target.value) || 0;
+                    const gr = parseFloat(grossRevenue) || 0;
+                    if (gp > 0) {
+                      onBreakdownChange(calculateCommission({ grossProfit: gp, grossRevenue: gr }));
+                    }
+                  }}
+                  className="h-8 pl-7 text-sm"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Gross Revenue (for bad debt reserve)</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="150000"
+                  value={grossRevenue}
+                  onChange={(e) => {
+                    setGrossRevenue(e.target.value);
+                    const gp = parseFloat(grossProfit) || 0;
+                    const gr = parseFloat(e.target.value) || 0;
+                    if (gp > 0) {
+                      onBreakdownChange(calculateCommission({ grossProfit: gp, grossRevenue: gr }));
+                    }
+                  }}
+                  className="h-8 pl-7 text-sm"
+                />
+              </div>
+            </div>
+            {calculatedBreakdown && (
+              <div className="p-2 rounded bg-income/10 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span>Rate: {calculatedBreakdown.commissionRatePercent}%</span>
+                  <span>Raw: {formatCurrency(calculatedBreakdown.rawCommission)}</span>
+                </div>
+                <div className="flex justify-between text-expense">
+                  <span>Bad Debt (1%)</span>
+                  <span>−{formatCurrency(calculatedBreakdown.badDebtReserve)}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-income border-t border-income/20 pt-1">
+                  <span>Net Payout</span>
+                  <span>{formatCurrency(calculatedBreakdown.netPayout)}</span>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Manual Mode */}
+            <div className="space-y-1">
+              <Label className="text-xs">Payout Amount</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="15987.04"
+                  value={manualAmount}
+                  onChange={(e) => setManualAmount(e.target.value)}
+                  className="h-8 pl-7 text-sm"
+                />
+              </div>
+            </div>
+          </>
+        )}
+        
         <div className="space-y-1">
           <Label className="text-xs">Expected Deposit Date</Label>
           <Popover>
@@ -203,7 +323,10 @@ function CommissionEntry({ commissions, onAdd, onRemove }: CommissionEntryProps)
                 )}
               >
                 <CalendarIcon className="mr-2 h-3 w-3" />
-                {expectedDate ? format(expectedDate, "PPP") : "Pick date"}
+                {expectedDate 
+                  ? format(expectedDate, "PPP") 
+                  : `Next: ${formatPaymentDate(nextScheduledPayment.paymentDate)}`
+                }
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -216,8 +339,16 @@ function CommissionEntry({ commissions, onAdd, onRemove }: CommissionEntryProps)
               />
             </PopoverContent>
           </Popover>
+          <p className="text-[10px] text-muted-foreground">
+            {nextScheduledPayment.periodLabel} • 4th business day after cutoff
+          </p>
         </div>
-        <Button type="submit" size="sm" className="w-full h-8">
+        <Button 
+          type="submit" 
+          size="sm" 
+          className="w-full h-8"
+          disabled={useCalculator ? !calculatedBreakdown : !manualAmount}
+        >
           <Plus className="w-3 h-3 mr-1" />
           Add Commission
         </Button>

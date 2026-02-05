@@ -50,6 +50,7 @@ export function ForecastColumn({
           isFromCommission={paydayInfo.isFromCommission}
           pendingCount={projection.pendingCount}
           resolvedCount={projection.resolvedCount}
+          periodLabel={paydayInfo.periodLabel}
         />
 
         {/* Bills Due List */}
@@ -190,6 +191,7 @@ interface NextPaydayCardProps {
   isFromCommission: boolean;
   pendingCount: number;
   resolvedCount: number;
+  periodLabel?: string;
 }
 
 function NextPaydayCard({ 
@@ -197,16 +199,22 @@ function NextPaydayCard({
   isFromCommission,
   pendingCount,
   resolvedCount,
+  periodLabel,
 }: NextPaydayCardProps) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-center gap-2 mb-2">
         <Clock className="w-4 h-4 text-primary" />
-        <h4 className="text-sm font-semibold">Next Payday</h4>
+        <h4 className="text-sm font-semibold">Next Deposit</h4>
       </div>
       <p className="text-lg font-semibold">{formatPayDate(paydayDate)}</p>
       <p className="text-xs text-muted-foreground">
-        {isFromCommission ? 'Based on expected commission' : 'Calculated from pay schedule'}
+        {isFromCommission 
+          ? 'Based on expected commission' 
+          : periodLabel 
+            ? `${periodLabel} • 4th business day after cutoff`
+            : 'Calculated from contract schedule'
+        }
       </p>
       <div className="flex gap-2 mt-3">
         <Badge variant="outline" className="text-xs">
