@@ -49,6 +49,35 @@ export function formatCutoffDescription(period: PayPeriod): string {
 /**
  * Analyze commissions and identify expired ones.
  */
+/**
+ * Parse a date string (YYYY-MM-DD) into a local Date object.
+ * Avoids UTC interpretation which can shift the date by a day.
+ */
+export function parseLocalDate(dateInput: Date | string): Date {
+  if (typeof dateInput === 'string') {
+    // Handle YYYY-MM-DD format - parse as local time
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      const [year, month, day] = dateInput.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    // For ISO strings or other formats, parse and extract local components
+    const d = new Date(dateInput);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  // Already a Date object - ensure we're working with local date
+  return new Date(dateInput.getFullYear(), dateInput.getMonth(), dateInput.getDate());
+}
+
+/**
+ * Format a Date to YYYY-MM-DD string for input fields.
+ */
+export function formatDateForInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function useCommissionStatus(commissions: PendingCommission[]): CommissionStatus {
   return useMemo(() => {
     const today = startOfDay(new Date());
@@ -57,7 +86,8 @@ export function useCommissionStatus(commissions: PendingCommission[]): Commissio
     const expired: PendingCommission[] = [];
     
     commissions.forEach((c) => {
-      const expDate = startOfDay(new Date(c.expectedDate));
+      // Use parseLocalDate to avoid timezone shifts
+      const expDate = parseLocalDate(c.expectedDate);
       if (expDate < today) {
         expired.push(c);
       } else {
@@ -67,7 +97,7 @@ export function useCommissionStatus(commissions: PendingCommission[]): Commissio
     
     // Sort upcoming by date
     upcoming.sort((a, b) => 
-      new Date(a.expectedDate).getTime() - new Date(b.expectedDate).getTime()
+      parseLocalDate(a.expectedDate).getTime() - parseLocalDate(b.expectedDate).getTime()
     );
     
     return {
