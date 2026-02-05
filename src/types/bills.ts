@@ -13,6 +13,8 @@ export interface Bill {
   notes?: string;
   /** Bill type: recurring (monthly) or one-time (single pay period) */
   type: BillType;
+  /** Whether this bill has been matched to a transaction this month */
+  isResolved: boolean;
 }
 
 export interface SuggestedVendor {
