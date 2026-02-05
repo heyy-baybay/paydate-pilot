@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { DollarSign, Calendar, Plus, X, TrendingUp, AlertCircle } from 'lucide-react';
+import { format } from 'date-fns';
+import { DollarSign, Calendar as CalendarIcon, Plus, X, TrendingUp, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/utils/financeUtils';
 import { PendingCommission } from '@/types/finance';
 import {
   useCommissionStatus,
   useAdvanceCommission,
   getNextPayPeriodDate,
-  formatCutoffDescription,
   formatDateForInput,
   parseLocalDate,
 } from '@/hooks/useCommissionManager';
@@ -32,8 +35,8 @@ interface ExpectedCommissionProps {
 export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCommissionProps) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
-  const [expectedDate, setExpectedDate] = useState('');
-  const [cutoffDate, setCutoffDate] = useState('');
+  const [expectedDate, setExpectedDate] = useState<Date | undefined>();
+  const [cutoffDate, setCutoffDate] = useState<Date | undefined>();
 
   const { upcoming, expired, nextCommission, hasExpired } = useCommissionStatus(commissions);
   const { advanceToNextPeriod } = useAdvanceCommission(onAdd, onRemove);
@@ -42,9 +45,8 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
   const handleOpenDialog = (isOpen: boolean) => {
     if (isOpen && !expectedDate) {
       const nextPeriod = getNextPayPeriodDate(new Date());
-      // Use formatDateForInput to avoid UTC timezone shift
-      setExpectedDate(formatDateForInput(nextPeriod.paymentDate));
-      setCutoffDate(formatCutoffDescription(nextPeriod));
+      setExpectedDate(nextPeriod.paymentDate);
+      setCutoffDate(nextPeriod.cutoffDate);
     }
     setOpen(isOpen);
   };
@@ -56,14 +58,13 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
     
     onAdd({
       amount: numAmount,
-      // Use parseLocalDate to create proper local date
-      expectedDate: parseLocalDate(expectedDate),
-      cutoffDate: cutoffDate || 'Unknown',
+      expectedDate: expectedDate,
+      cutoffDate: cutoffDate ? format(cutoffDate, 'MMM d, yyyy') : 'Unknown',
     });
     
     setAmount('');
-    setExpectedDate('');
-    setCutoffDate('');
+    setExpectedDate(undefined);
+    setCutoffDate(undefined);
     setOpen(false);
   };
 
@@ -114,24 +115,56 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="expectedDate">Expected Deposit Date</Label>
-                <Input
-                  id="expectedDate"
-                  type="date"
-                  value={expectedDate}
-                  onChange={(e) => setExpectedDate(e.target.value)}
-                  required
-                />
+                <Label>Expected Deposit Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !expectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {expectedDate ? format(expectedDate, "PPP") : <span>Pick deposit date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={expectedDate}
+                      onSelect={setExpectedDate}
+                      initialFocus
+                      className="p-3 pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="cutoffDate">Cutoff Period (optional)</Label>
-                <Input
-                  id="cutoffDate"
-                  type="text"
-                  placeholder="Through Jan 15, 2026"
-                  value={cutoffDate}
-                  onChange={(e) => setCutoffDate(e.target.value)}
-                />
+                <Label>Good Through Date (optional)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !cutoffDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {cutoffDate ? format(cutoffDate, "PPP") : <span>Pick cutoff date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={cutoffDate}
+                      onSelect={setCutoffDate}
+                      initialFocus
+                      className="p-3 pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <Button type="submit" className="w-full">
                 Add Commission
@@ -223,7 +256,7 @@ export function ExpectedCommission({ commissions, onAdd, onRemove }: ExpectedCom
                   className="flex items-center justify-between p-2 rounded bg-muted/50 group"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    <CalendarIcon className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                     <div className="min-w-0">
                       <p className="text-sm font-mono font-medium text-income">
                         {formatCurrency(commission.amount)}
