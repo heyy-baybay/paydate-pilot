@@ -10,8 +10,12 @@
  */
 
 export interface CommissionInput {
+  /** Net gross profit (sum of shipment gross profits) */
   grossProfit: number;
+  /** Total gross revenue (sum of shipment revenues) */
   grossRevenue: number;
+  /** Optional: total negative gross profit across shipments (as a positive number) */
+  lossAdjustment?: number;
 }
 
 export interface CommissionBreakdown {
@@ -20,6 +24,8 @@ export interface CommissionBreakdown {
   commissionRate: number; // 0.70 or 0.75
   commissionRatePercent: number; // 70 or 75
   rawCommission: number;
+  lossAdjustment: number;
+  commissionAfterLoss: number;
   badDebtReserve: number;
   badDebtReserveRate: number; // 0.01
   netPayout: number;
@@ -29,21 +35,24 @@ export interface CommissionBreakdown {
  * Calculate commission payout following Margin Freight contract terms.
  */
 export function calculateCommission(input: CommissionInput): CommissionBreakdown {
-  const { grossProfit, grossRevenue } = input;
+  const { grossProfit, grossRevenue, lossAdjustment = 0 } = input;
   
   // Determine commission rate based on gross profit threshold
   const GP_THRESHOLD = 50000;
   const commissionRate = grossProfit <= GP_THRESHOLD ? 0.70 : 0.75;
   
-  // Calculate raw commission
+  // Commission on gross profit
   const rawCommission = grossProfit * commissionRate;
+
+  // If shipments have negative gross profit, reduce commission dollar-for-dollar
+  const commissionAfterLoss = rawCommission - Math.max(0, lossAdjustment);
   
-  // Calculate bad debt reserve (1% of gross revenue)
+  // Bad debt reserve (1% of total gross revenue)
   const BAD_DEBT_RATE = 0.01;
   const badDebtReserve = grossRevenue * BAD_DEBT_RATE;
   
-  // Net payout = commission - bad debt reserve
-  const netPayout = Math.max(0, rawCommission - badDebtReserve);
+  // Net payout = commission after loss - bad debt reserve
+  const netPayout = Math.max(0, commissionAfterLoss - badDebtReserve);
   
   return {
     grossProfit,
@@ -51,6 +60,8 @@ export function calculateCommission(input: CommissionInput): CommissionBreakdown
     commissionRate,
     commissionRatePercent: commissionRate * 100,
     rawCommission,
+    lossAdjustment: Math.max(0, lossAdjustment),
+    commissionAfterLoss,
     badDebtReserve,
     badDebtReserveRate: BAD_DEBT_RATE,
     netPayout,

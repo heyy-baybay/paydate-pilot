@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { 
   DollarSign, 
@@ -116,6 +116,7 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
   const [manualAmount, setManualAmount] = useState('');
   const [grossProfit, setGrossProfit] = useState('');
   const [grossRevenue, setGrossRevenue] = useState('');
+  const [lossAdjustment, setLossAdjustment] = useState('');
   const [expectedDate, setExpectedDate] = useState<Date | undefined>();
   
   // Get next scheduled payment date for default
@@ -125,14 +126,15 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
     if (!useCalculator) return null;
     const gp = parseFloat(grossProfit) || 0;
     const gr = parseFloat(grossRevenue) || 0;
+    const loss = parseFloat(lossAdjustment) || 0;
     if (gp <= 0) return null;
-    return calculateCommission({ grossProfit: gp, grossRevenue: gr });
+    return calculateCommission({ grossProfit: gp, grossRevenue: gr, lossAdjustment: loss });
   })();
 
   // Update parent with breakdown
-  useState(() => {
+  useEffect(() => {
     onBreakdownChange(calculatedBreakdown);
-  });
+  }, [calculatedBreakdown, onBreakdownChange]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,6 +167,7 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
     setManualAmount('');
     setGrossProfit('');
     setGrossRevenue('');
+    setLossAdjustment('');
     setExpectedDate(undefined);
     onBreakdownChange(null);
     toast.success('Commission added');
@@ -178,7 +181,7 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
 
   return (
     <div className="rounded-xl border border-income/20 bg-card p-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-income" />
           <h3 className="font-semibold">Expected Commission</h3>
@@ -199,6 +202,10 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
           {useCalculator ? 'Manual' : 'Calculate'}
         </Button>
       </div>
+
+      <p className="text-[10px] text-muted-foreground mb-4">
+        Calculated at 70% Gross Profit (≤$50k) / 75% (&gt;$50k) minus 1% Gross Revenue reserve.
+      </p>
 
       {/* Existing Commissions */}
       {upcomingCommissions.length > 0 && (
@@ -245,8 +252,11 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
                     setGrossProfit(e.target.value);
                     const gp = parseFloat(e.target.value) || 0;
                     const gr = parseFloat(grossRevenue) || 0;
+                    const loss = parseFloat(lossAdjustment) || 0;
                     if (gp > 0) {
-                      onBreakdownChange(calculateCommission({ grossProfit: gp, grossRevenue: gr }));
+                      onBreakdownChange(
+                        calculateCommission({ grossProfit: gp, grossRevenue: gr, lossAdjustment: loss })
+                      );
                     }
                   }}
                   className="h-8 pl-7 text-sm"
@@ -266,13 +276,44 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
                     setGrossRevenue(e.target.value);
                     const gp = parseFloat(grossProfit) || 0;
                     const gr = parseFloat(e.target.value) || 0;
+                    const loss = parseFloat(lossAdjustment) || 0;
                     if (gp > 0) {
-                      onBreakdownChange(calculateCommission({ grossProfit: gp, grossRevenue: gr }));
+                      onBreakdownChange(
+                        calculateCommission({ grossProfit: gp, grossRevenue: gr, lossAdjustment: loss })
+                      );
                     }
                   }}
                   className="h-8 pl-7 text-sm"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Negative Gross Profit (losses)</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0"
+                  value={lossAdjustment}
+                  onChange={(e) => {
+                    setLossAdjustment(e.target.value);
+                    const gp = parseFloat(grossProfit) || 0;
+                    const gr = parseFloat(grossRevenue) || 0;
+                    const loss = parseFloat(e.target.value) || 0;
+                    if (gp > 0) {
+                      onBreakdownChange(
+                        calculateCommission({ grossProfit: gp, grossRevenue: gr, lossAdjustment: loss })
+                      );
+                    }
+                  }}
+                  className="h-8 pl-7 text-sm"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Enter total losses from negative-profit shipments (reduces commission dollar-for-dollar).
+              </p>
             </div>
             {calculatedBreakdown && (
               <div className="p-2 rounded bg-income/10 text-xs space-y-1">
@@ -280,6 +321,12 @@ function CommissionEntry({ commissions, onAdd, onRemove, onBreakdownChange }: Co
                   <span>Rate: {calculatedBreakdown.commissionRatePercent}%</span>
                   <span>Raw: {formatCurrency(calculatedBreakdown.rawCommission)}</span>
                 </div>
+                {calculatedBreakdown.lossAdjustment > 0 && (
+                  <div className="flex justify-between text-expense">
+                    <span>Loss Adjustment</span>
+                    <span>−{formatCurrency(calculatedBreakdown.lossAdjustment)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-expense">
                   <span>Bad Debt (1%)</span>
                   <span>−{formatCurrency(calculatedBreakdown.badDebtReserve)}</span>

@@ -71,6 +71,12 @@ export function ContractInfo({ currentBreakdown }: ContractInfoProps) {
                 <span>Raw Commission</span>
                 <span className="font-mono">{formatCurrency(currentBreakdown.rawCommission)}</span>
               </div>
+              {currentBreakdown.lossAdjustment > 0 && (
+                <div className="flex justify-between text-expense">
+                  <span>− Loss Adjustment</span>
+                  <span className="font-mono">−{formatCurrency(currentBreakdown.lossAdjustment)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-expense">
                 <span>− Bad Debt Reserve</span>
                 <span className="font-mono">−{formatCurrency(currentBreakdown.badDebtReserve)}</span>

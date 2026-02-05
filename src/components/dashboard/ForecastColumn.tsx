@@ -35,9 +35,9 @@ export function ForecastColumn({
 
         {/* Projection Breakdown */}
         <ProjectionBreakdown
-          currentBalance={currentBalance}
+          currentBalance={projection.liquidityBalance}
           amountToKeep={projection.amountToKeep}
-          commissionAmount={nextCommission?.amount || 0}
+          commissionAmount={projection.commissionForProjection}
           projectedBalance={projection.projectedBalance}
           coveragePercent={projection.coveragePercent}
           isShort={projection.isShort}
@@ -127,7 +127,7 @@ function ProjectionBreakdown({
       
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Current Balance</span>
+          <span className="text-muted-foreground">Current Liquidity</span>
           <span className="font-mono">{formatCurrency(currentBalance)}</span>
         </div>
         <div className="flex justify-between">
