@@ -161,18 +161,31 @@ export function useBills(transactions: Transaction[]) {
     setBills((prev) => [...prev, { ...bill, id: `bill-${Date.now()}` }]);
   };
 
-  const addBillFromTransaction = (tx: Transaction) => {
+  const addBillFromTransaction = (tx: Transaction, allTransactions?: Transaction[]) => {
     if (!isExpenseTx(tx)) return;
 
     const vendor = (extractVendorName(tx.description) || normalizeVendor(tx.description)).trim();
     if (!vendor) return;
 
-    const amount = Math.round(Math.abs(tx.amount) * 100) / 100;
+    const vendorKeyNorm = safeKey(vendor);
     const dueDay = new Date(tx.date).getDate();
-    const vendorKey = safeKey(vendor);
+
+    // Calculate average amount from all matching transactions if provided
+    let avgAmount = Math.abs(tx.amount);
+    if (allTransactions && allTransactions.length > 0) {
+      const matchingTxs = allTransactions.filter(
+        (t) => isExpenseTx(t) && safeKey(extractVendorName(t.description) || normalizeVendor(t.description)) === vendorKeyNorm
+      );
+      if (matchingTxs.length > 0) {
+        const total = matchingTxs.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        avgAmount = total / matchingTxs.length;
+      }
+    }
+
+    const amount = Math.round(avgAmount * 100) / 100;
 
     setBills((prev) => {
-      const exists = prev.some((b) => safeKey(b.vendor) === vendorKey && b.active);
+      const exists = prev.some((b) => safeKey(b.vendor) === vendorKeyNorm && b.active);
       if (exists) return prev;
       return [
         ...prev,
@@ -183,6 +196,7 @@ export function useBills(transactions: Transaction[]) {
           dueDay,
           category: tx.category,
           active: true,
+          type: 'recurring' as const,
         },
       ];
     });
@@ -201,12 +215,13 @@ export function useBills(transactions: Transaction[]) {
   };
 
   const addFromSuggestion = (suggestion: SuggestedVendor) => {
-    const newBill = {
+    const newBill: Omit<Bill, 'id'> = {
       vendor: suggestion.vendor,
       amount: suggestion.avgAmount,
       dueDay: suggestion.suggestedDueDay,
       category: suggestion.category,
       active: true,
+      type: 'recurring',
     };
     addBill(newBill);
   };

@@ -8,7 +8,7 @@ import { BalanceSettings } from '@/components/BalanceSettings';
 import { RecurringSummary } from '@/components/RecurringSummary';
 import { PayPeriodInfo } from '@/components/PayPeriodInfo';
 import { MyBills } from '@/components/MyBills';
-import { BillsBeforePayday } from '@/components/BillsBeforePayday';
+import { BillForecast } from '@/components/BillForecast';
 import { ExpectedCommission } from '@/components/ExpectedCommission';
 import { useBills } from '@/hooks/useBills';
 import { Transaction, FinanceSettings, PendingCommission } from '@/types/finance';
@@ -20,6 +20,7 @@ import {
   getUniqueMonths,
   generateMonthSummary,
 } from '@/utils/financeUtils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const STORAGE_KEYS = {
   RAW_DATA: 'cashflow_raw_data',
@@ -179,11 +180,26 @@ const Index = () => {
     id: string,
     updates: Partial<Pick<Transaction, 'category' | 'isRecurring'>>
   ) => {
-    // If marking as recurring, also create a bill entry
+    // If marking as recurring, also create a bill entry using average from history
     if (updates.isRecurring === true) {
       const tx = transactionsWithOverrides.find((t) => t.id === id);
       if (tx && !tx.isRecurring) {
-        addBillFromTransaction(tx);
+        addBillFromTransaction(tx, transactionsWithOverrides);
+      }
+    }
+
+    // If updating category, also update the bill's category if exists
+    if (updates.category) {
+      const tx = transactionsWithOverrides.find((t) => t.id === id);
+      if (tx) {
+        // Find matching bill and update its category
+        const matchingBill = bills.find(
+          (b) => b.vendor.toLowerCase() === tx.description.toLowerCase() ||
+                 b.vendor.toLowerCase().includes(tx.description.toLowerCase().slice(0, 10))
+        );
+        if (matchingBill) {
+          updateBill(matchingBill.id, { category: updates.category });
+        }
       }
     }
 
@@ -252,47 +268,92 @@ const Index = () => {
           <>
             <SummaryCards summary={currentSummary} currentBalance={currentBalance} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Transaction Table */}
-              <div className="lg:col-span-3">
-                <TransactionTable
-                  transactions={filteredTransactions}
-                  lowBalanceThreshold={settings.lowBalanceThreshold}
-                  onUpdateTransaction={handleUpdateTransaction}
-                />
-              </div>
+            {/* Main Content Area with Tabs */}
+            <Tabs defaultValue="forecast" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsTrigger value="forecast">Bill Forecast</TabsTrigger>
+                <TabsTrigger value="transactions">Transactions</TabsTrigger>
+                <TabsTrigger value="settings">Settings</TabsTrigger>
+              </TabsList>
 
-              {/* Sidebar */}
-              <div className="space-y-4">
-                <CSVUploader onUpload={handleCSVUpload} hasData={true} />
-                <ExpectedCommission
-                  commissions={pendingCommissions}
-                  onAdd={handleAddCommission}
-                  onRemove={handleRemoveCommission}
-                />
-                <MyBills
-                  bills={bills}
-                  suggestedVendors={suggestedVendors}
-                  onAddBill={addBill}
-                  onUpdateBill={updateBill}
-                  onRemoveBill={removeBill}
-                  onAddFromSuggestion={addFromSuggestion}
-                  onDismissSuggestion={dismissSuggestion}
-                  ignoredVendorCount={
-                    Object.keys(ignoredVendors || {}).filter((k) => ignoredVendors[k]).length
-                  }
-                  onRestoreIgnoredVendors={restoreAllIgnoredVendors}
-                />
-                <BillsBeforePayday
-                  bills={bills}
-                  currentBalance={currentBalance}
-                  nextCommission={nextCommission}
-                  onAddCommission={handleAddCommission}
-                />
-                <PayPeriodInfo selectedMonth={settings.selectedMonth} nextCommission={nextCommission} />
-                <RecurringSummary transactions={filteredTransactions} />
-              </div>
-            </div>
+              {/* Bill Forecast Tab */}
+              <TabsContent value="forecast" className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Main Forecast Section */}
+                  <div className="lg:col-span-2">
+                    <BillForecast
+                      bills={bills}
+                      transactions={transactionsWithOverrides}
+                      currentBalance={currentBalance}
+                      nextCommission={nextCommission}
+                      onAddCommission={handleAddCommission}
+                    />
+                  </div>
+
+                  {/* Sidebar */}
+                  <div className="space-y-4">
+                    <ExpectedCommission
+                      commissions={pendingCommissions}
+                      onAdd={handleAddCommission}
+                      onRemove={handleRemoveCommission}
+                    />
+                    <MyBills
+                      bills={bills}
+                      suggestedVendors={suggestedVendors}
+                      onAddBill={addBill}
+                      onUpdateBill={updateBill}
+                      onRemoveBill={removeBill}
+                      onAddFromSuggestion={addFromSuggestion}
+                      onDismissSuggestion={dismissSuggestion}
+                      ignoredVendorCount={
+                        Object.keys(ignoredVendors || {}).filter((k) => ignoredVendors[k]).length
+                      }
+                      onRestoreIgnoredVendors={restoreAllIgnoredVendors}
+                    />
+                    <PayPeriodInfo selectedMonth={settings.selectedMonth} nextCommission={nextCommission} />
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Transactions Tab */}
+              <TabsContent value="transactions" className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                  <div className="lg:col-span-3">
+                    <TransactionTable
+                      transactions={filteredTransactions}
+                      lowBalanceThreshold={settings.lowBalanceThreshold}
+                      onUpdateTransaction={handleUpdateTransaction}
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <CSVUploader onUpload={handleCSVUpload} hasData={true} />
+                    <RecurringSummary transactions={filteredTransactions} />
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Settings Tab */}
+              <TabsContent value="settings" className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-border bg-card p-6">
+                      <h3 className="font-semibold mb-4">Data Management</h3>
+                      <CSVUploader onUpload={handleCSVUpload} hasData={true} />
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-border bg-card p-6">
+                      <h3 className="font-semibold mb-4">Commission Management</h3>
+                      <ExpectedCommission
+                        commissions={pendingCommissions}
+                        onAdd={handleAddCommission}
+                        onRemove={handleRemoveCommission}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </main>

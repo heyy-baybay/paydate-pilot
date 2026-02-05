@@ -1,3 +1,5 @@
+export type BillType = 'recurring' | 'one-time';
+
 export interface Bill {
   id: string;
   vendor: string;
@@ -9,6 +11,8 @@ export interface Bill {
   active: boolean;
   /** Optional notes */
   notes?: string;
+  /** Bill type: recurring (monthly) or one-time (single pay period) */
+  type: BillType;
 }
 
 export interface SuggestedVendor {
