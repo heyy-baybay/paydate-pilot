@@ -10,6 +10,7 @@ import {
   formatPayDate,
   getOrdinal,
 } from '@/hooks/useFinanceCalculations';
+import { parseLocalDate } from '@/hooks/useCommissionManager';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +52,8 @@ export function BillsBeforePayday({
     if (!isNaN(amount) && amount > 0 && commissionDate && onAddCommission) {
       onAddCommission({
         amount,
-        expectedDate: new Date(commissionDate),
+        // Parse as local date to avoid YYYY-MM-DD being treated as UTC (can shift a day)
+        expectedDate: parseLocalDate(commissionDate),
         cutoffDate: '',
       });
       setCommissionAmount('');

@@ -16,35 +16,60 @@ export function CSVUploader({ onUpload, hasData }: CSVUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateCSV = (content: string): { ok: true; count: number } | { ok: false; error: string } => {
-    const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const lines = content
+      .split(/\r?\n/)
+      .map((l) => l.trimEnd())
+      .filter((l) => l.trim().length > 0);
     if (lines.length < 2) return { ok: false, error: 'CSV appears to be empty.' };
 
-    const headerWindow = lines.slice(0, 25).map((l) => l.toLowerCase());
-    
-    // Chase bank account format: Details,Posting Date,Description,Amount,Type,Balance
-    const bankHeaderLine = headerWindow.find((l) => l.startsWith('details,') && l.includes('posting date'));
-    
-    // Chase credit card format: Transaction Date,Post Date,Description,Category,Type,Amount
-    const chaseCardHeaderLine = headerWindow.find((l) => 
-      l.includes('transaction date') && l.includes('post date') && l.includes('amount')
+    const normalizeHeaderLine = (line: string) =>
+      line
+        .replace(/^\uFEFF/, '') // strip BOM
+        .replace(/"/g, '') // remove quotes
+        .toLowerCase()
+        .replace(/\s*,\s*/g, ',') // normalize comma spacing
+        .replace(/\s+/g, ' ') // collapse spaces
+        .trim();
+
+    const headerWindow = lines.slice(0, 25).map(normalizeHeaderLine);
+
+    // Chase bank account format (sometimes quoted): Details,Posting Date,Description,Amount,Type,Balance
+    const bankHeaderLine = headerWindow.find(
+      (l) => l.includes('details') && l.includes('posting date') && l.includes('balance')
     );
-    
+
+    // Chase credit card format: Transaction Date,Post Date,Description,Category,Type,Amount
+    const chaseCardHeaderLine = headerWindow.find(
+      (l) => l.includes('transaction date') && l.includes('post date') && l.includes('amount')
+    );
+
     // QuickBooks format
     const qbHeaderLine = headerWindow.find((l) => l.includes('transaction type') && l.includes('account name'));
 
+    // If we can't confidently identify by headers, still attempt parsing.
+    // (Some Chase exports vary slightly but are still parseable.)
     if (!bankHeaderLine && !qbHeaderLine && !chaseCardHeaderLine) {
-      return {
-        ok: false,
-        error:
-          'Unrecognized CSV format. Expected a Chase bank/credit card export or QuickBooks Transaction List by Date export.',
-      };
+      try {
+        const parsed = parseCSV(content);
+        if (!parsed.length) {
+          return {
+            ok: false,
+            error:
+              'Unrecognized CSV format. Expected a Chase bank/credit card export or QuickBooks Transaction List by Date export.',
+          };
+        }
+        return { ok: true, count: parsed.length };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return { ok: false, error: `Could not parse CSV: ${message}` };
+      }
     }
 
     // Only validate required headers for bank format (credit card and QB have different structure)
     if (bankHeaderLine) {
-      const headers = bankHeaderLine.split(',').map((h) => h.replace(/"/g, '').trim());
+      const headers = bankHeaderLine.split(',').map((h) => h.trim());
       const required = ['details', 'posting date', 'description', 'amount', 'type', 'balance'];
-      const missing = required.filter((r) => !headers.some((h) => h.toLowerCase() === r));
+      const missing = required.filter((r) => !headers.some((h) => h === r));
       if (missing.length) {
         return { ok: false, error: `Missing required header(s): ${missing.join(', ')}` };
       }
