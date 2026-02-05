@@ -397,12 +397,15 @@ export function determinePayPeriodImpact(dateStr: string): boolean {
 }
 
 // Detect CSV format type
-function detectCSVFormat(lines: string[]): 'bank' | 'quickbooks' {
-  // QuickBooks has metadata rows and specific header pattern
+function detectCSVFormat(lines: string[]): 'bank' | 'quickbooks' | 'chasecard' {
   for (let i = 0; i < Math.min(10, lines.length); i++) {
     const line = lines[i].toLowerCase();
     if (line.includes('transaction type') && line.includes('account name')) {
       return 'quickbooks';
+    }
+    // Chase credit card: Transaction Date,Post Date,Description,Category,Type,Amount
+    if (line.includes('transaction date') && line.includes('post date') && line.includes('amount')) {
+      return 'chasecard';
     }
   }
   return 'bank';
@@ -424,7 +427,7 @@ export function parseCSV(content: string): RawTransaction[] {
   // Check if this might be a merged file with multiple CSV sections
   const allTransactions: RawTransaction[] = [];
   let currentSection: string[] = [];
-  let currentFormat: 'bank' | 'quickbooks' | null = null;
+  let currentFormat: 'bank' | 'quickbooks' | 'chasecard' | null = null;
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -434,19 +437,19 @@ export function parseCSV(content: string): RawTransaction[] {
     const isQuickBooksHeader = lineLower.includes('transaction type') && lineLower.includes('account name');
     // Detect Bank header (Details,Posting Date,Description,Amount,Type,Balance)
     const isBankHeader = lineLower.startsWith('details,') && lineLower.includes('posting date');
+    // Detect Chase credit card header (Transaction Date,Post Date,Description,Category,Type,Amount)
+    const isChaseCardHeader = lineLower.includes('transaction date') && lineLower.includes('post date') && lineLower.includes('amount');
     
-    if (isQuickBooksHeader || isBankHeader) {
+    if (isQuickBooksHeader || isBankHeader || isChaseCardHeader) {
       // Parse previous section if we have one
       if (currentSection.length > 0 && currentFormat) {
-        const parsed = currentFormat === 'quickbooks' 
-          ? parseQuickBooksCSV(currentSection)
-          : parseBankCSV(currentSection);
+        const parsed = parseFormatSection(currentSection, currentFormat);
         allTransactions.push(...parsed);
       }
       
       // Start new section
       currentSection = [line];
-      currentFormat = isQuickBooksHeader ? 'quickbooks' : 'bank';
+      currentFormat = isQuickBooksHeader ? 'quickbooks' : isChaseCardHeader ? 'chasecard' : 'bank';
     } else if (currentFormat) {
       currentSection.push(line);
     } else {
@@ -461,13 +464,24 @@ export function parseCSV(content: string): RawTransaction[] {
     if (!currentFormat) {
       currentFormat = detectCSVFormat(currentSection);
     }
-    const parsed = currentFormat === 'quickbooks' 
-      ? parseQuickBooksCSV(currentSection)
-      : parseBankCSV(currentSection);
+    const parsed = parseFormatSection(currentSection, currentFormat);
     allTransactions.push(...parsed);
   }
   
   return allTransactions;
+}
+
+// Helper to parse a section based on detected format
+function parseFormatSection(lines: string[], format: 'bank' | 'quickbooks' | 'chasecard'): RawTransaction[] {
+  switch (format) {
+    case 'quickbooks':
+      return parseQuickBooksCSV(lines);
+    case 'chasecard':
+      return parseChaseCardCSV(lines);
+    case 'bank':
+    default:
+      return parseBankCSV(lines);
+  }
 }
 
 // Parse QuickBooks Transaction List by Date format
@@ -526,6 +540,54 @@ function parseQuickBooksCSV(lines: string[]): RawTransaction[] {
       balance: 0, // QuickBooks doesn't provide running balance
       checkOrSlip: undefined,
       qbCategory: accountFullName.replace(/^"|"$/g, ''), // Preserve QuickBooks category
+    });
+  }
+  
+  return transactions;
+}
+
+// Parse Chase credit card CSV format
+// Headers: Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+function parseChaseCardCSV(lines: string[]): RawTransaction[] {
+  const transactions: RawTransaction[] = [];
+  
+  // Skip header row
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    
+    const fields = parseCSVLine(line);
+    if (fields.length < 6) continue;
+    
+    // Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+    const transactionDate = fields[0];
+    const postDate = fields[1];
+    const description = fields[2].replace(/^"|"$/g, '');
+    const category = fields[3];
+    const type = fields[4];
+    const amount = parseFloat(fields[5].replace(/,/g, '')) || 0;
+    const memo = fields[6] || '';
+    
+    // Skip empty rows
+    if (!postDate || !description) continue;
+    
+    // Determine transaction type based on amount and type field
+    let txType = type.toUpperCase();
+    if (amount > 0) {
+      txType = 'CREDIT';
+    } else if (amount < 0) {
+      txType = 'DEBIT';
+    }
+    
+    transactions.push({
+      details: type,
+      postingDate: postDate,
+      description: memo ? `${description} - ${memo}` : description,
+      amount: amount,
+      type: txType,
+      balance: 0, // Chase credit card doesn't provide running balance
+      checkOrSlip: undefined,
+      qbCategory: category, // Use Chase category for mapping
     });
   }
   
