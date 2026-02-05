@@ -1,6 +1,8 @@
-import { Check, Clock, DollarSign, TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
+import { Check, Clock, DollarSign, TrendingUp, AlertTriangle, Calendar, Pencil, Trash2, X } from 'lucide-react';
+import { useState } from 'react';
 import { formatCurrency } from '@/utils/financeUtils';
 import { PendingCommission } from '@/types/finance';
+import { Bill } from '@/types/bills';
 import { 
   DashboardFinanceData, 
   BillWithStatus, 
@@ -10,17 +12,24 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface ForecastColumnProps {
   dashboardFinance: DashboardFinanceData;
   currentBalance: number;
   nextCommission: PendingCommission | null;
+  onUpdateBill?: (id: string, updates: Partial<Bill>) => void;
+  onRemoveBill?: (id: string) => void;
 }
 
 export function ForecastColumn({
   dashboardFinance,
   currentBalance,
   nextCommission,
+  onUpdateBill,
+  onRemoveBill,
 }: ForecastColumnProps) {
   const { paydayInfo, billsBeforePayday, projection } = dashboardFinance;
 
@@ -54,7 +63,7 @@ export function ForecastColumn({
         />
 
         {/* Bills Due List */}
-        <BillsDueList bills={billsBeforePayday} />
+        <BillsDueList bills={billsBeforePayday} onUpdateBill={onUpdateBill} onRemoveBill={onRemoveBill} />
       </div>
     </ScrollArea>
   );
@@ -236,9 +245,11 @@ function NextPaydayCard({
 
 interface BillsDueListProps {
   bills: BillWithStatus[];
+  onUpdateBill?: (id: string, updates: Partial<Bill>) => void;
+  onRemoveBill?: (id: string) => void;
 }
 
-function BillsDueList({ bills }: BillsDueListProps) {
+function BillsDueList({ bills, onUpdateBill, onRemoveBill }: BillsDueListProps) {
   const unpaidBills = bills.filter((b) => !b.isResolved);
   const paidBills = bills.filter((b) => b.isResolved);
 
@@ -254,7 +265,7 @@ function BillsDueList({ bills }: BillsDueListProps) {
         <div className="space-y-2">
           {/* Unpaid Bills */}
           {unpaidBills.map((bill) => (
-            <BillRow key={bill.id} bill={bill} />
+            <BillRow key={bill.id} bill={bill} onUpdateBill={onUpdateBill} onRemoveBill={onRemoveBill} />
           ))}
 
           {/* Paid Bills */}
@@ -264,7 +275,7 @@ function BillsDueList({ bills }: BillsDueListProps) {
                 Paid This Month
               </div>
               {paidBills.map((bill) => (
-                <BillRow key={bill.id} bill={bill} />
+                <BillRow key={bill.id} bill={bill} onUpdateBill={onUpdateBill} onRemoveBill={onRemoveBill} />
               ))}
             </>
           )}
@@ -276,12 +287,34 @@ function BillsDueList({ bills }: BillsDueListProps) {
 
 interface BillRowProps {
   bill: BillWithStatus;
+  onUpdateBill?: (id: string, updates: Partial<Bill>) => void;
+  onRemoveBill?: (id: string) => void;
 }
 
-function BillRow({ bill }: BillRowProps) {
+function BillRow({ bill, onUpdateBill, onRemoveBill }: BillRowProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editAmount, setEditAmount] = useState(bill.amount.toString());
+  const [editDueDay, setEditDueDay] = useState(bill.dueDay.toString());
+
+  const handleSave = () => {
+    if (onUpdateBill) {
+      onUpdateBill(bill.id, {
+        amount: parseFloat(editAmount) || bill.amount,
+        dueDay: parseInt(editDueDay) || bill.dueDay,
+      });
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditAmount(bill.amount.toString());
+    setEditDueDay(bill.dueDay.toString());
+    setIsEditing(false);
+  };
+
   return (
     <div
-      className={`flex items-center justify-between p-2 rounded text-xs ${
+      className={`flex items-center justify-between p-2 rounded text-xs group ${
         bill.isResolved
           ? 'bg-income/10 border border-income/20'
           : 'bg-muted/50'
@@ -303,11 +336,75 @@ function BillRow({ bill }: BillRowProps) {
           </p>
         </div>
       </div>
-      <span className={`font-mono font-semibold ${
-        bill.isResolved ? 'text-income line-through' : 'text-expense'
-      }`}>
-        {formatCurrency(bill.amount)}
-      </span>
+      
+      <div className="flex items-center gap-1">
+        <span className={`font-mono font-semibold ${
+          bill.isResolved ? 'text-income line-through' : 'text-expense'
+        }`}>
+          {formatCurrency(bill.amount)}
+        </span>
+        
+        {/* Edit/Delete controls */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+          <Popover open={isEditing} onOpenChange={setIsEditing}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setIsEditing(true)}
+              >
+                <Pencil className="w-3 h-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-3" align="end">
+              <div className="space-y-3">
+                <div className="text-sm font-medium">{bill.vendor}</div>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Amount</label>
+                    <Input
+                      type="number"
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                      className="h-8 text-sm"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Due Day</label>
+                    <Input
+                      type="number"
+                      value={editDueDay}
+                      onChange={(e) => setEditDueDay(e.target.value)}
+                      className="h-8 text-sm"
+                      min="1"
+                      max="31"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleCancel}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => onRemoveBill?.(bill.id)}
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

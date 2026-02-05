@@ -336,6 +336,8 @@ const Index = () => {
               dashboardFinance={dashboardFinance}
               currentBalance={currentBalance}
               nextCommission={nextCommission}
+              onUpdateBill={updateBill}
+              onRemoveBill={removeBill}
             />
           </div>
         </div>
