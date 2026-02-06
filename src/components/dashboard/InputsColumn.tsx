@@ -25,6 +25,7 @@ import { getOrdinal } from '@/hooks/useFinanceCalculations';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { CSVUploader } from '@/components/CSVUploader';
 import {
   Collapsible,
   CollapsibleContent,
@@ -83,6 +84,9 @@ export function InputsColumn({
 
         {/* One-Time Bill Entry */}
         <OneTimeBillEntry onAddBill={onAddBill} />
+
+        {/* Upload / Replace Transactions */}
+        <CSVUploader onUpload={onUploadCSV} hasData={true} />
 
         {/* My Bills Manager */}
         <BillsManager
